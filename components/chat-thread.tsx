@@ -1,0 +1,142 @@
+"use client"
+
+import { useEffect, useRef } from "react"
+import type { UIMessage } from "ai"
+import type { SavedDrawing } from "@/app/page"
+
+function getMessageText(msg: UIMessage): string {
+  if (!msg.parts || !Array.isArray(msg.parts)) return ""
+  return msg.parts
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("")
+    // Hide the canvas-trigger marker from the visible transcript
+    .replace(/\[draw_now\]/gi, "")
+    .trim()
+}
+
+interface ChatThreadProps {
+  messages: UIMessage[]
+  status: "submitted" | "streaming" | "ready" | "error"
+  drawings?: SavedDrawing[]
+}
+
+type Item =
+  | { kind: "msg"; key: string; t: number; node: UIMessage }
+  | { kind: "drawing"; key: string; t: number; node: SavedDrawing }
+
+export function ChatThread({ messages, status, drawings = [] }: ChatThreadProps) {
+  const endRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+  }, [messages, status, drawings])
+
+  const isWaiting = status === "submitted"
+
+  // Interleave messages and drawings chronologically. Messages get incrementing
+  // virtual timestamps based on order so drawings can splice in naturally.
+  const items: Item[] = []
+  messages.forEach((m, i) => {
+    items.push({ kind: "msg", key: m.id, t: i, node: m })
+  })
+  drawings.forEach((d) => {
+    // Drawings live "between" messages — push to the end so the user-message
+    // that announced the sketch still appears with the image alongside.
+    items.push({ kind: "drawing", key: d.id, t: messages.length + d.createdAt / 1e10, node: d })
+  })
+  items.sort((a, b) => a.t - b.t)
+
+  return (
+    <section
+      className="flex flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-8 md:px-12"
+      aria-live="polite"
+      aria-label="Conversation with Bitsy"
+    >
+      <div className="mx-auto flex w-full max-w-md flex-col gap-4 md:max-w-lg lg:max-w-2xl">
+        {items.map((item) => {
+          if (item.kind === "drawing") {
+            return (
+              <div key={item.key} className="flex justify-end">
+                <figure
+                  className="max-w-[82%] overflow-hidden rounded-[20px] rounded-br-[6px] bg-background/80 p-2 backdrop-blur-xl"
+                  style={{
+                    border: "0.75px solid rgba(26,26,31,0.14)",
+                    boxShadow: "0 14px 28px -18px rgba(60, 70, 90, 0.22)",
+                  }}
+                >
+                  <div
+                    className="overflow-hidden rounded-[14px] bg-white"
+                    style={{ border: "0.5px solid rgba(26,26,31,0.08)" }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.node.dataUrl || "/placeholder.svg"}
+                      alt={item.node.note ?? "User sketch"}
+                      className="block h-auto w-full"
+                    />
+                  </div>
+                  <figcaption className="mt-2 px-1 pb-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45">
+                    sketch · {new Date(item.node.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </figcaption>
+                </figure>
+              </div>
+            )
+          }
+
+          const m = item.node
+          const text = getMessageText(m)
+          if (!text) return null
+          const isUser = m.role === "user"
+          return (
+            <div key={item.key} className={isUser ? "flex justify-end" : "flex justify-start"}>
+              <div
+                className={
+                  isUser
+                    ? "max-w-[82%] rounded-[20px] rounded-br-[6px] bg-foreground px-4 py-2.5 font-mono text-[13px] font-light leading-relaxed text-background"
+                    : "max-w-[88%] rounded-[20px] rounded-bl-[6px] bg-background/75 px-4 py-2.5 font-mono text-[13px] font-light leading-relaxed text-foreground backdrop-blur-xl"
+                }
+                style={
+                  isUser
+                    ? undefined
+                    : {
+                        border: "0.75px solid rgba(26,26,31,0.14)",
+                        boxShadow: "0 8px 20px -14px rgba(60, 70, 90, 0.18)",
+                      }
+                }
+              >
+                {!isUser && (
+                  <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45">
+                    bitsy
+                  </p>
+                )}
+                <p className="whitespace-pre-wrap text-pretty">{text}</p>
+              </div>
+            </div>
+          )
+        })}
+
+        {isWaiting && (
+          <div className="flex justify-start">
+            <div
+              className="rounded-[20px] rounded-bl-[6px] bg-background/75 px-4 py-3 backdrop-blur-xl"
+              style={{
+                border: "0.75px solid rgba(26,26,31,0.14)",
+                boxShadow: "0 8px 20px -14px rgba(60, 70, 90, 0.18)",
+              }}
+              aria-label="Bitsy is thinking"
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-foreground/50 [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-foreground/50 [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-foreground/50 [animation-delay:300ms]" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={endRef} />
+      </div>
+    </section>
+  )
+}
