@@ -11,6 +11,11 @@ import { ChatSnippet } from "@/components/chat-snippet"
 import { InteractionBar } from "@/components/interaction-bar"
 import { LensView } from "@/components/lens-view"
 import { CanvasView } from "@/components/canvas-view"
+import { MenuDrawer, type MenuDestination } from "@/components/menu-drawer"
+import { ProfileView } from "@/components/profile-view"
+import { HistoryView } from "@/components/history-view"
+import { GalleryView } from "@/components/gallery-view"
+import { deriveSessionTitle, upsertSession, type ChatSession } from "@/lib/storage"
 
 export interface SavedDrawing {
   id: string
@@ -24,12 +29,33 @@ export default function HomePage() {
   const [lensOpen, setLensOpen] = useState(false)
   const [canvasOpen, setCanvasOpen] = useState(false)
   const [drawings, setDrawings] = useState<SavedDrawing[]>([])
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [activeView, setActiveView] = useState<MenuDestination | null>(null)
   const lastTriggeredMessageIdRef = useRef<string | null>(null)
   const canvasCloseRef = useRef<(() => void) | null>(null)
+  const sessionIdRef = useRef<string | null>(null)
+  const sessionStartedRef = useRef<number | null>(null)
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   })
+
+  // Persist the active conversation to localStorage so it shows up in chat history
+  useEffect(() => {
+    if (messages.length === 0) return
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      sessionStartedRef.current = Date.now()
+    }
+    const session: ChatSession = {
+      id: sessionIdRef.current,
+      startedAt: sessionStartedRef.current ?? Date.now(),
+      updatedAt: Date.now(),
+      title: deriveSessionTitle(messages),
+      messages,
+    }
+    upsertSession(session)
+  }, [messages])
 
   // Auto-open canvas when Bitsy emits the [draw_now] marker
   useEffect(() => {
@@ -81,7 +107,9 @@ export default function HomePage() {
     }
     setDrawings((prev) => [...prev, drawing])
     sendMessage({
-      text: saved.note ? `I just made a quick sketch — ${saved.note}` : "I just made a quick sketch. What do you see in it?",
+      text: saved.note
+        ? `I just made a quick sketch — ${saved.note}`
+        : "I just made a quick sketch. What do you see in it?",
     })
   }
 
@@ -90,7 +118,10 @@ export default function HomePage() {
       <main className="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col md:max-w-lg lg:max-w-2xl">
         <AuraBackground />
 
-        <TopBar onBack={canvasOpen ? () => canvasCloseRef.current?.() : undefined} />
+        <TopBar
+          onBack={canvasOpen ? () => canvasCloseRef.current?.() : undefined}
+          onMenu={canvasOpen ? undefined : () => setMenuOpen(true)}
+        />
 
         {canvasOpen ? (
           <>
@@ -115,7 +146,22 @@ export default function HomePage() {
           </>
         )}
       </main>
+
       {lensOpen && <LensView onClose={() => setLensOpen(false)} />}
+
+      <MenuDrawer
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onNavigate={(dest) => setActiveView(dest)}
+      />
+
+      {activeView === "profile" && (
+        <ProfileView onClose={() => setActiveView(null)} drawingsCount={drawings.length} />
+      )}
+      {activeView === "history" && (
+        <HistoryView onClose={() => setActiveView(null)} activeSessionId={sessionIdRef.current} />
+      )}
+      {activeView === "gallery" && <GalleryView onClose={() => setActiveView(null)} drawings={drawings} />}
     </>
   )
 }
