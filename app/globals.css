@@ -284,4 +284,19 @@
   .animate-album-exit {
     animation: album-exit 220ms ease-in forwards;
   }
+
+  /* Cursor ripple on the frosted-glass card */
+  @keyframes ripple-fade {
+    0% {
+      transform: scale(1);
+      opacity: 0.7;
+    }
+    100% {
+      transform: scale(18);
+      opacity: 0;
+    }
+  }
+  .animate-ripple-fade {
+    animation: ripple-fade 850ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
 }

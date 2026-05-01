@@ -1,10 +1,62 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import Image from "next/image"
+
+interface Ripple {
+  id: number
+  x: number
+  y: number
+}
 
 export function BitsyCard() {
   const [flipped, setFlipped] = useState(false)
+  const [ripples, setRipples] = useState<Ripple[]>([])
+
+  const frontRef = useRef<HTMLDivElement>(null)
+  const lastSpawnAtRef = useRef(0)
+  const lastSpawnPosRef = useRef<{ x: number; y: number } | null>(null)
+  const rippleIdRef = useRef(0)
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (flipped) return
+    const el = frontRef.current
+    if (!el) return
+
+    const rect = el.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    // Clip to interior — ignore the dead pixels right at the rounded edge
+    if (x < 0 || y < 0 || x > rect.width || y > rect.height) return
+
+    // Continuous cursor spotlight via CSS vars (no re-render)
+    el.style.setProperty("--mx", `${x}px`)
+    el.style.setProperty("--my", `${y}px`)
+    el.style.setProperty("--mo", "1")
+
+    // Spawn discrete ripples — throttled by time + movement distance so
+    // standing still doesn't flood the surface
+    const now = performance.now()
+    const last = lastSpawnPosRef.current
+    const dist = last ? Math.hypot(x - last.x, y - last.y) : Number.POSITIVE_INFINITY
+
+    if (now - lastSpawnAtRef.current > 95 && dist > 22) {
+      lastSpawnAtRef.current = now
+      lastSpawnPosRef.current = { x, y }
+      const id = ++rippleIdRef.current
+      setRipples((rs) => [...rs, { id, x, y }])
+      window.setTimeout(() => {
+        setRipples((rs) => rs.filter((r) => r.id !== id))
+      }, 900)
+    }
+  }
+
+  const handlePointerLeave = () => {
+    const el = frontRef.current
+    if (!el) return
+    el.style.setProperty("--mo", "0")
+  }
 
   return (
     <section className="flex flex-1 items-center justify-center px-4 py-6 sm:px-8 md:px-12 md:py-10">
@@ -24,6 +76,9 @@ export function BitsyCard() {
           >
             {/* FRONT — frosted glass with the artwork blurred underneath */}
             <div
+              ref={frontRef}
+              onPointerMove={handlePointerMove}
+              onPointerLeave={handlePointerLeave}
               className="backface-hidden absolute inset-0 overflow-hidden rounded-[36px] text-left"
               style={{
                 border: "0.75px solid rgba(26,26,31,0.18)",
@@ -58,6 +113,39 @@ export function BitsyCard() {
                 }}
                 aria-hidden="true"
               />
+
+              {/* Cursor spotlight — continuous soft glow that tracks the pointer */}
+              <div
+                className="pointer-events-none absolute inset-0 transition-opacity duration-300"
+                style={{
+                  opacity: "var(--mo, 0)" as unknown as number,
+                  background:
+                    "radial-gradient(circle 160px at var(--mx, 50%) var(--my, 50%), rgba(255,255,255,0.42), rgba(255,255,255,0) 70%)",
+                  mixBlendMode: "soft-light",
+                }}
+                aria-hidden="true"
+              />
+
+              {/* Ripple bursts — spawned on movement, fade out radially */}
+              <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+                {ripples.map((r) => (
+                  <span
+                    key={r.id}
+                    className="animate-ripple-fade absolute block rounded-full"
+                    style={{
+                      left: r.x,
+                      top: r.y,
+                      width: 14,
+                      height: 14,
+                      marginLeft: -7,
+                      marginTop: -7,
+                      background:
+                        "radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.35) 45%, rgba(255,255,255,0) 75%)",
+                      mixBlendMode: "soft-light",
+                    }}
+                  />
+                ))}
+              </div>
 
               {/* Soft bottom vignette to anchor the headline */}
               <div
