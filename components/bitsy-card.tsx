@@ -22,26 +22,64 @@ export function BitsyCard() {
               transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
             }}
           >
-            {/* FRONT */}
+            {/* FRONT — frosted glass with the artwork blurred underneath */}
             <div
-              className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[36px] p-7 text-left"
+              className="backface-hidden absolute inset-0 overflow-hidden rounded-[36px] text-left"
               style={{
-                backgroundColor: "rgba(255,255,255,0.7)",
-                backdropFilter: "blur(40px) saturate(140%)",
-                WebkitBackdropFilter: "blur(40px) saturate(140%)",
                 border: "0.75px solid rgba(26,26,31,0.18)",
-                boxShadow: "0 30px 60px -20px rgba(60, 70, 90, 0.12), 0 1px 0 0 rgba(255,255,255,0.7) inset",
+                boxShadow: "0 30px 60px -20px rgba(60, 70, 90, 0.12)",
                 transform: "rotateY(0deg) translateZ(0.01px)",
               }}
             >
-              <div className="flex-1" />
-              <div className="space-y-2">
-                <h1 className="tracking-display text-pretty font-mono text-3xl font-normal leading-tight text-foreground sm:text-[34px]">
-                  {"Hi, I'm Bitsy"}
-                </h1>
-                <p className="font-mono text-[11px] font-light text-foreground/60">
-                  click to see the artwork of the day
-                </p>
+              {/* Underlying artwork, heavily blurred + slightly scaled to avoid edge bleed */}
+              <Image
+                src="/artwork-of-the-day.png"
+                alt=""
+                fill
+                sizes="(max-width: 768px) 100vw, 384px"
+                priority
+                unoptimized
+                aria-hidden="true"
+                className="object-cover"
+                style={{
+                  filter: "blur(36px) saturate(115%)",
+                  transform: "scale(1.18)",
+                }}
+              />
+
+              {/* Frosted-glass wash on top of the blurred artwork for legibility */}
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundColor: "rgba(248,249,250,0.55)",
+                  backdropFilter: "blur(18px) saturate(130%)",
+                  WebkitBackdropFilter: "blur(18px) saturate(130%)",
+                  boxShadow: "0 1px 0 0 rgba(255,255,255,0.55) inset",
+                }}
+                aria-hidden="true"
+              />
+
+              {/* Soft bottom vignette to anchor the headline */}
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5"
+                style={{
+                  background:
+                    "linear-gradient(180deg, rgba(248,249,250,0) 0%, rgba(248,249,250,0.55) 70%, rgba(248,249,250,0.85) 100%)",
+                }}
+                aria-hidden="true"
+              />
+
+              {/* Foreground content */}
+              <div className="relative flex h-full flex-col p-7">
+                <div className="flex-1" />
+                <div className="space-y-2">
+                  <h1 className="tracking-display text-pretty font-mono text-3xl font-normal leading-tight text-foreground sm:text-[34px]">
+                    {"Hi, I'm Bitsy"}
+                  </h1>
+                  <p className="font-mono text-[11px] font-light text-foreground/60">
+                    click to see the artwork of the day
+                  </p>
+                </div>
               </div>
             </div>
 
