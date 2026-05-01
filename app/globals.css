@@ -256,4 +256,32 @@
   .animate-scan-pulse {
     animation: scan-pulse 2.4s ease-in-out infinite;
   }
+
+  /* Album sheet slide-up */
+  @keyframes album-enter {
+    from {
+      transform: translateY(100%);
+      opacity: 0.4;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  @keyframes album-exit {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(100%);
+      opacity: 0.4;
+    }
+  }
+  .animate-album-enter {
+    animation: album-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .animate-album-exit {
+    animation: album-exit 220ms ease-in forwards;
+  }
 }

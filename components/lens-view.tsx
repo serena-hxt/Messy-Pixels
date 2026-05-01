@@ -1,22 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ChevronRight, Menu, RotateCcw } from "lucide-react"
+import { ChevronRight, Menu, RotateCcw, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-type Recognition = {
-  recognized: boolean
-  title: string | null
-  artist: string | null
-  year: string | null
-  confidence: number
-}
+import { AlbumSheet, type Recognition, type RecognizedHistoryItem } from "@/components/album-sheet"
 
 type Danmaku = {
   id: string
   text: string
   top: number
   duration: number
+  userAuthored?: boolean
 }
 
 const DANMAKU_PHRASES = [
@@ -29,6 +23,8 @@ const DANMAKU_PHRASES = [
   "screensaver material",
   "look at those leaves",
 ]
+
+const HISTORY_KEY = "bitsy_recognized_v1"
 
 interface LensViewProps {
   onClose: () => void
@@ -48,6 +44,43 @@ export function LensView({ onClose }: LensViewProps) {
   const [exiting, setExiting] = useState(false)
   const [danmaku, setDanmaku] = useState<Danmaku[]>([])
   const [scanning, setScanning] = useState(false)
+  const [commentInput, setCommentInput] = useState("")
+  const [albumOpen, setAlbumOpen] = useState(false)
+  const [recognizedHistory, setRecognizedHistory] = useState<RecognizedHistoryItem[]>([])
+
+  // Load persisted recognition history
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY)
+      if (raw) setRecognizedHistory(JSON.parse(raw))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  // Save recognition to history whenever a confident match arrives
+  useEffect(() => {
+    if (!recognition?.recognized || !recognition.title || !recognition.artist) return
+    setRecognizedHistory((prev) => {
+      const key = `${recognition.title}::${recognition.artist}`
+      const filtered = prev.filter((p) => `${p.title}::${p.artist}` !== key)
+      const next: RecognizedHistoryItem[] = [
+        {
+          ...recognition,
+          id: Math.random().toString(36).slice(2),
+          capturedAt: Date.now(),
+        },
+        ...filtered,
+      ].slice(0, 50)
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [recognition?.title, recognition?.artist, recognition?.recognized])
 
   // Start / restart camera stream when facing changes
   useEffect(() => {
@@ -111,10 +144,8 @@ export function LensView({ onClose }: LensViewProps) {
     return canvas.toDataURL("image/jpeg", 0.7)
   }, [])
 
-  const recognize = useCallback(async () => {
+  const recognizeImage = useCallback(async (frame: string) => {
     if (scanningRef.current) return
-    const frame = captureFrame()
-    if (!frame) return
     scanningRef.current = true
     setScanning(true)
     try {
@@ -137,18 +168,24 @@ export function LensView({ onClose }: LensViewProps) {
       scanningRef.current = false
       setScanning(false)
     }
-  }, [captureFrame])
+  }, [])
 
-  // Auto-scan periodically while camera is live
+  const recognize = useCallback(async () => {
+    const frame = captureFrame()
+    if (!frame) return
+    await recognizeImage(frame)
+  }, [captureFrame, recognizeImage])
+
+  // Auto-scan periodically while camera is live (paused while album is open)
   useEffect(() => {
-    if (error) return
-    const initial = setTimeout(recognize, 1500)
-    const interval = setInterval(recognize, 5000)
+    if (error || albumOpen) return
+    const initial = window.setTimeout(recognize, 1500)
+    const interval = window.setInterval(recognize, 5000)
     return () => {
-      clearTimeout(initial)
-      clearInterval(interval)
+      window.clearTimeout(initial)
+      window.clearInterval(interval)
     }
-  }, [recognize, error])
+  }, [recognize, error, albumOpen])
 
   // Danmaku spawner — only when toggled on AND artwork is recognized
   useEffect(() => {
@@ -156,7 +193,7 @@ export function LensView({ onClose }: LensViewProps) {
       setDanmaku([])
       return
     }
-    const interval = setInterval(() => {
+    const interval = window.setInterval(() => {
       setDanmaku((prev) => {
         const next = prev.length > 4 ? prev.slice(1) : [...prev]
         next.push({
@@ -168,18 +205,47 @@ export function LensView({ onClose }: LensViewProps) {
         return next
       })
     }, 2200)
-    return () => clearInterval(interval)
+    return () => window.clearInterval(interval)
   }, [danmakuOn, recognition?.recognized])
 
   function handleBack() {
     setExiting(true)
-    setTimeout(onClose, 380)
+    window.setTimeout(onClose, 380)
   }
 
   function switchCamera() {
     setFacing((f) => (f === "environment" ? "user" : "environment"))
     setRecognition(null)
   }
+
+  function handleSubmitComment(e: React.FormEvent) {
+    e.preventDefault()
+    const text = commentInput.trim()
+    if (!text || !recognition?.recognized) return
+    setDanmaku((prev) => [
+      ...prev.slice(-4),
+      {
+        id: Math.random().toString(36).slice(2),
+        text,
+        top: 18 + Math.random() * 40,
+        duration: 9 + Math.random() * 3,
+        userAuthored: true,
+      },
+    ])
+    setCommentInput("")
+  }
+
+  // From the album: a user-picked artwork manually applies recognition
+  function handleSelectFromAlbum(rec: Recognition) {
+    setRecognition(rec)
+  }
+
+  // From the album: a user-picked local image runs through the recognizer
+  async function handleLocalImage(dataUrl: string) {
+    await recognizeImage(dataUrl)
+  }
+
+  const showCommentInput = danmakuOn
 
   return (
     <div
@@ -220,14 +286,21 @@ export function LensView({ onClose }: LensViewProps) {
 
       {/* Danmaku layer */}
       {danmakuOn && (
-        <div className="pointer-events-none absolute inset-x-0 top-20 bottom-56 overflow-hidden">
+        <div className="pointer-events-none absolute inset-x-0 top-32 bottom-56 overflow-hidden">
           {danmaku.map((d) => (
             <div
               key={d.id}
               className="absolute left-0 animate-danmaku-slide whitespace-nowrap"
               style={{ top: `${d.top}%`, animationDuration: `${d.duration}s` }}
             >
-              <span className="rounded-full border border-white/20 bg-white/15 px-3 py-1 font-mono text-[12px] text-white backdrop-blur-md">
+              <span
+                className={cn(
+                  "rounded-full px-3 py-1 font-mono text-[12px] backdrop-blur-md",
+                  d.userAuthored
+                    ? "border border-rose-300/50 bg-rose-300/20 text-white"
+                    : "border border-white/20 bg-white/15 text-white",
+                )}
+              >
                 {d.text}
               </span>
             </div>
@@ -248,7 +321,7 @@ export function LensView({ onClose }: LensViewProps) {
         <button
           type="button"
           onClick={() => setDanmakuOn((v) => !v)}
-          aria-label={danmakuOn ? "Turn danmaku off" : "Turn danmaku on"}
+          aria-label={danmakuOn ? "Turn floating comments off" : "Turn floating comments on"}
           aria-pressed={danmakuOn}
           className="font-mono text-[13px] tracking-[0.18em] text-white/85 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
         >
@@ -257,6 +330,44 @@ export function LensView({ onClose }: LensViewProps) {
           <span className={cn("transition-colors", !danmakuOn ? "text-rose-400" : "text-white/40")}>OFF</span>
         </button>
       </header>
+
+      {/* Comment input — appears only when floating comments are ON */}
+      {showCommentInput && (
+        <div className="absolute inset-x-0 top-16 z-10 px-5">
+          <form
+            onSubmit={handleSubmitComment}
+            className="flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 backdrop-blur-xl"
+          >
+            <input
+              type="text"
+              value={commentInput}
+              onChange={(e) => setCommentInput(e.target.value)}
+              placeholder={
+                recognition?.recognized
+                  ? `Comment on ${recognition.title}…`
+                  : "Spot an artwork to leave a comment…"
+              }
+              disabled={!recognition?.recognized}
+              maxLength={80}
+              aria-label="Add a comment about this artwork"
+              className="flex-1 bg-transparent font-mono text-[12px] text-white placeholder:text-white/45 outline-none disabled:cursor-not-allowed"
+            />
+            <button
+              type="submit"
+              disabled={!recognition?.recognized || !commentInput.trim()}
+              aria-label="Send comment"
+              className={cn(
+                "flex h-7 w-7 items-center justify-center rounded-full transition-colors",
+                recognition?.recognized && commentInput.trim()
+                  ? "bg-white text-foreground hover:scale-105"
+                  : "bg-white/15 text-white/35",
+              )}
+            >
+              <Send className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Scan reticle (subtle, only when nothing recognized yet) */}
       {!recognition?.recognized && !error && (
@@ -294,6 +405,7 @@ export function LensView({ onClose }: LensViewProps) {
             {/* Album */}
             <button
               type="button"
+              onClick={() => setAlbumOpen(true)}
               aria-label="Open album"
               className="h-11 w-11 rounded-xl border-[1.5px] border-white/70 bg-white/5 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
             />
@@ -362,6 +474,15 @@ export function LensView({ onClose }: LensViewProps) {
           </div>
         </div>
       </div>
+
+      {/* Album sheet */}
+      <AlbumSheet
+        open={albumOpen}
+        onClose={() => setAlbumOpen(false)}
+        recognizedHistory={recognizedHistory}
+        onSelectArtwork={handleSelectFromAlbum}
+        onPickLocalImage={handleLocalImage}
+      />
 
       {/* Error state */}
       {error && (
