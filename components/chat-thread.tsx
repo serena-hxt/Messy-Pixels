@@ -15,6 +15,30 @@ function getMessageText(msg: UIMessage): string {
     .trim()
 }
 
+/**
+ * Render a string with **bold** markdown converted to <strong> spans, while
+ * preserving newlines and any unmatched asterisks. Lightweight on purpose —
+ * we only need bold so we don't pull in a full markdown parser.
+ */
+function renderRichText(text: string): React.ReactNode[] {
+  const out: React.ReactNode[] = []
+  // Split on **...** while keeping the captured group separate
+  const parts = text.split(/(\*\*[^*\n]+?\*\*)/g)
+  parts.forEach((part, i) => {
+    if (!part) return
+    if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
+      out.push(
+        <strong key={i} className="font-medium text-foreground">
+          {part.slice(2, -2)}
+        </strong>,
+      )
+    } else {
+      out.push(<span key={i}>{part}</span>)
+    }
+  })
+  return out
+}
+
 interface ChatThreadProps {
   messages: UIMessage[]
   status: "submitted" | "streaming" | "ready" | "error"
@@ -111,7 +135,9 @@ export function ChatThread({ messages, status, drawings = [], error }: ChatThrea
                     bitsy
                   </p>
                 )}
-                <p className="whitespace-pre-wrap text-pretty">{text}</p>
+                <p className="whitespace-pre-wrap text-pretty">
+                  {isUser ? text : renderRichText(text)}
+                </p>
               </div>
             </div>
           )
