@@ -1,4 +1,5 @@
 import { generateText, Output } from "ai"
+import { google } from "@ai-sdk/google"
 import { z } from "zod"
 
 export const maxDuration = 30
@@ -21,7 +22,10 @@ export async function POST(req: Request) {
     }
 
     const result = await generateText({
-      model: "openai/gpt-5-mini",
+      // Gemini 2.5 Flash supports vision + structured output. Using Google
+      // here keeps recognition on the same provider that powers chat, so the
+      // app only needs one API key to function end-to-end.
+      model: google("gemini-2.5-flash"),
       experimental_output: Output.object({ schema: RecognitionSchema }),
       messages: [
         {
@@ -32,8 +36,9 @@ export async function POST(req: Request) {
               text:
                 "You are a museum vision system. Analyze this camera frame. " +
                 "If you can clearly identify a SPECIFIC famous artwork (painting, sculpture, or drawing) — even from a partial or angled view — return its title, artist, and year. " +
+                "Be generous with well-known masterworks but conservative with obscure ones. " +
                 "If the frame shows a person, room, hand, blank wall, random object, or anything you cannot identify as a specific known artwork, set recognized=false with low confidence. " +
-                "Be honest and conservative — never guess. Only set recognized=true when confidence > 0.7.",
+                "Never guess. Only set recognized=true when confidence > 0.7.",
             },
             { type: "image", image },
           ],

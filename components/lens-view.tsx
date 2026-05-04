@@ -1,9 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { AnimatePresence, motion } from "framer-motion"
 import { ChevronRight, Menu, RotateCcw, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AlbumSheet, type Recognition, type RecognizedHistoryItem } from "@/components/album-sheet"
+import { useSelectedArtwork } from "@/contexts/selected-artwork-context"
+import type { Artwork } from "@/lib/ham-api"
 
 type Danmaku = {
   id: string
@@ -36,6 +39,8 @@ export function LensView({ onClose }: LensViewProps) {
   const streamRef = useRef<MediaStream | null>(null)
   const scanningRef = useRef(false)
 
+  const { setArtwork } = useSelectedArtwork()
+
   const [facing, setFacing] = useState<"environment" | "user">("environment")
   const [danmakuOn, setDanmakuOn] = useState(true)
   const [mode, setMode] = useState<"photo" | "video">("photo")
@@ -47,6 +52,11 @@ export function LensView({ onClose }: LensViewProps) {
   const [commentInput, setCommentInput] = useState("")
   const [albumOpen, setAlbumOpen] = useState(false)
   const [recognizedHistory, setRecognizedHistory] = useState<RecognizedHistoryItem[]>([])
+
+  // The HAM-resolved artwork that powers the Digital Twin overlay. Cleared
+  // whenever the recognition is dropped (e.g. user re-points the camera).
+  const [digitalTwin, setDigitalTwin] = useState<Artwork | null>(null)
+  const [twinLoading, setTwinLoading] = useState(false)
 
   // Load persisted recognition history
   useEffect(() => {
@@ -81,6 +91,47 @@ export function LensView({ onClose }: LensViewProps) {
       return next
     })
   }, [recognition?.title, recognition?.artist, recognition?.recognized])
+
+  // Whenever a confident recognition comes in, fetch the HAM record so we can
+  // overlay the Digital Twin and populate the SelectedArtworkContext for the
+  // rest of the app (chat, gallery, etc.) to consume.
+  useEffect(() => {
+    if (!recognition?.recognized || !recognition.title) {
+      setDigitalTwin(null)
+      return
+    }
+
+    const title = recognition.title
+    const artist = recognition.artist
+    const key = `${title}::${artist}`
+
+    let cancelled = false
+    setTwinLoading(true)
+
+    const params = new URLSearchParams({ title })
+    if (artist) params.set("artist", artist)
+
+    fetch(`/api/artwork?${params.toString()}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)
+      .then((data: { artwork: Artwork | null } | null) => {
+        if (cancelled) return
+        const art = data?.artwork ?? null
+        // Only commit if recognition didn't change while we were fetching.
+        const stillCurrent = `${recognition.title}::${recognition.artist}` === key
+        if (stillCurrent) {
+          setDigitalTwin(art)
+          if (art) setArtwork(art)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTwinLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [recognition?.recognized, recognition?.title, recognition?.artist, setArtwork])
 
   // Start / restart camera stream when facing changes
   useEffect(() => {
@@ -176,16 +227,17 @@ export function LensView({ onClose }: LensViewProps) {
     await recognizeImage(frame)
   }, [captureFrame, recognizeImage])
 
-  // Auto-scan periodically while camera is live (paused while album is open)
+  // Auto-scan periodically while camera is live (paused while album is open or
+  // a digital twin is already on-screen — no need to keep scanning over it).
   useEffect(() => {
-    if (error || albumOpen) return
+    if (error || albumOpen || digitalTwin) return
     const initial = window.setTimeout(recognize, 1500)
     const interval = window.setInterval(recognize, 5000)
     return () => {
       window.clearTimeout(initial)
       window.clearInterval(interval)
     }
-  }, [recognize, error, albumOpen])
+  }, [recognize, error, albumOpen, digitalTwin])
 
   // Danmaku spawner — only when toggled on AND artwork is recognized
   useEffect(() => {
@@ -216,6 +268,12 @@ export function LensView({ onClose }: LensViewProps) {
   function switchCamera() {
     setFacing((f) => (f === "environment" ? "user" : "environment"))
     setRecognition(null)
+    setDigitalTwin(null)
+  }
+
+  function clearTwin() {
+    setRecognition(null)
+    setDigitalTwin(null)
   }
 
   function handleSubmitComment(e: React.FormEvent) {
@@ -246,6 +304,12 @@ export function LensView({ onClose }: LensViewProps) {
   }
 
   const showCommentInput = danmakuOn
+
+  // Display title/artist: prefer the resolved HAM record (cleaner formatting)
+  // and fall back to the recognition payload while loading.
+  const displayTitle = digitalTwin?.title || recognition?.title || ""
+  const displayArtist = digitalTwin?.artist || recognition?.artist || ""
+  const displayYear = recognition?.year || ""
 
   return (
     <div
@@ -284,9 +348,47 @@ export function LensView({ onClose }: LensViewProps) {
         }}
       />
 
+      {/*
+        Digital Twin overlay — when the recognized artwork resolves to a HAM
+        record, fade the high-resolution image in over the camera feed using
+        Framer Motion. The effect is meant to feel like the physical painting
+        is being digitally restored on top of itself.
+      */}
+      <AnimatePresence>
+        {digitalTwin?.primaryimageurl && (
+          <motion.div
+            key={digitalTwin.id}
+            className="pointer-events-none absolute inset-0 z-[1]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
+            aria-hidden="true"
+          >
+            {/* Soft black backdrop so letterboxed edges feel intentional */}
+            <div className="absolute inset-0 bg-foreground/85" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={digitalTwin.primaryimageurl}
+              alt={`${digitalTwin.title} by ${digitalTwin.artist}`}
+              className="absolute inset-0 h-full w-full object-contain"
+              draggable={false}
+            />
+            {/* Subtle gold edge glow to suggest "restoration" finish */}
+            <div
+              className="absolute inset-0 mix-blend-overlay"
+              style={{
+                background:
+                  "radial-gradient(70% 70% at 50% 50%, transparent 60%, rgba(255, 220, 160, 0.2) 100%)",
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Danmaku layer */}
       {danmakuOn && (
-        <div className="pointer-events-none absolute inset-x-0 top-32 bottom-56 overflow-hidden">
+        <div className="pointer-events-none absolute inset-x-0 top-32 bottom-56 z-[2] overflow-hidden">
           {danmaku.map((d) => (
             <div
               key={d.id}
@@ -370,7 +472,7 @@ export function LensView({ onClose }: LensViewProps) {
       )}
 
       {/* Scan reticle (subtle, only when nothing recognized yet) */}
-      {!recognition?.recognized && !error && (
+      {!recognition?.recognized && !error && !digitalTwin && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div
             className={cn(
@@ -381,19 +483,42 @@ export function LensView({ onClose }: LensViewProps) {
         </div>
       )}
 
-      {/* Recognized artwork metadata — ONLY when match is confident */}
-      {recognition?.recognized && recognition.title && recognition.artist && (
-        <div className="absolute inset-x-0 bottom-44 z-10 flex justify-center px-6">
-          <p
-            key={`${recognition.title}-${recognition.artist}`}
-            className="animate-meta-rise text-balance text-center font-mono text-[13px] tracking-tight text-white/90"
-            style={{ textShadow: "0 1px 16px rgba(0,0,0,0.6)" }}
+      {/*
+        Glassmorphic title / artist label — shown whenever the artwork is
+        recognized (whether or not the HAM lookup has returned). It fades in
+        with a small upward translation so it feels grounded under the twin.
+      */}
+      <AnimatePresence>
+        {recognition?.recognized && displayTitle && displayArtist && (
+          <motion.div
+            key={`${displayTitle}-${displayArtist}`}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
+            className="absolute inset-x-0 bottom-36 z-10 flex justify-center px-6"
           >
-            {recognition.title}, {recognition.artist}
-            {recognition.year ? `, ${recognition.year}` : ""}
-          </p>
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={clearTwin}
+              aria-label="Dismiss artwork overlay"
+              className="group max-w-[88%] rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-left backdrop-blur-2xl transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              style={{ boxShadow: "0 18px 40px -16px rgba(0,0,0,0.55)" }}
+            >
+              <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-white/55">
+                {twinLoading ? "restoring" : "now viewing"}
+              </p>
+              <p className="font-mono text-[14px] leading-tight text-white">
+                {displayTitle}
+              </p>
+              <p className="mt-0.5 font-mono text-[11px] text-white/70">
+                {displayArtist}
+                {displayYear ? ` · ${displayYear}` : ""}
+              </p>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Bottom tray */}
       <div className="absolute inset-x-0 bottom-0 z-10 px-4 pb-6 pt-2">

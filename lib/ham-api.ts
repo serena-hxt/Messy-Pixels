@@ -160,6 +160,10 @@ export async function fetchArtworkById(id: number): Promise<Artwork> {
 export interface SearchArtworksOptions {
   /** Free-text search across title, artist, etc. */
   q?: string
+  /** Title-only filter (HAM-supported). Use to disambiguate generic titles. */
+  title?: string
+  /** Artist / maker name filter (HAM-supported). */
+  person?: string
   /** Filter to records that have an image attached. Defaults to true. */
   hasimage?: boolean
   /** Page size — capped at 100 by HAM. */
@@ -177,6 +181,8 @@ export async function searchArtworks(opts: SearchArtworksOptions = {}): Promise<
   const apikey = getApiKey()
   const params = new URLSearchParams({ apikey })
   if (opts.q) params.set("q", opts.q)
+  if (opts.title) params.set("title", opts.title)
+  if (opts.person) params.set("person", opts.person)
   params.set("hasimage", opts.hasimage === false ? "0" : "1")
   params.set("size", String(opts.size ?? 12))
   if (opts.page) params.set("page", String(opts.page))
@@ -198,4 +204,55 @@ export async function searchArtworks(opts: SearchArtworksOptions = {}): Promise<
   return (data.records ?? [])
     .filter((r) => r.primaryimageurl) // drop image-less records defensively
     .map(mapHamObjectToArtwork)
+}
+
+/* -------------------------------------------------------------------------- */
+/* Convenience: best-match lookup for "title + artist"                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Try to find the single best HAM record for a (title, artist) pair. Used by
+ * the lens digital-twin and the popular-works grid. We attempt progressively
+ * looser queries until something with an image returns.
+ */
+export async function findBestMatch(input: {
+  title: string
+  artist?: string
+}): Promise<Artwork | null> {
+  const { title, artist } = input
+
+  // 1. Strict: title + person filters (most accurate)
+  if (artist) {
+    try {
+      const exact = await searchArtworks({ title, person: artist, size: 5 })
+      if (exact.length > 0) return exact[0]
+    } catch {
+      /* fall through */
+    }
+  }
+
+  // 2. Title-only filter (some HAM titles are unique enough to win on their own)
+  try {
+    const titled = await searchArtworks({ title, size: 5 })
+    if (titled.length > 0) {
+      // If we have an artist hint, prefer the closest artist match.
+      if (artist) {
+        const lowerArtist = artist.toLowerCase()
+        const best = titled.find((a) => a.artist.toLowerCase().includes(lowerArtist))
+        if (best) return best
+      }
+      return titled[0]
+    }
+  } catch {
+    /* fall through */
+  }
+
+  // 3. Free-text fallback combining title + artist into one query
+  try {
+    const q = artist ? `${title} ${artist}` : title
+    const broad = await searchArtworks({ q, size: 5 })
+    return broad[0] ?? null
+  } catch {
+    return null
+  }
 }

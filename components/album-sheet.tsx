@@ -1,8 +1,9 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Upload, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import type { Artwork } from "@/lib/ham-api"
 
 export type Recognition = {
   recognized: boolean
@@ -14,42 +15,6 @@ export type Recognition = {
 
 export type RecognizedHistoryItem = Recognition & { id: string; capturedAt: number }
 
-const POPULAR_WORKS: Array<{
-  title: string
-  artist: string
-  year: string
-  palette: string[]
-}> = [
-  { title: "Mona Lisa", artist: "Leonardo da Vinci", year: "1503", palette: ["#5a4a32", "#8b6f47", "#c9a66b"] },
-  { title: "Starry Night", artist: "Vincent van Gogh", year: "1889", palette: ["#1a3a5e", "#4a6fa5", "#ffd966"] },
-  { title: "The Scream", artist: "Edvard Munch", year: "1893", palette: ["#d65a3a", "#f5b94a", "#3a4d6a"] },
-  {
-    title: "Girl with a Pearl Earring",
-    artist: "Johannes Vermeer",
-    year: "1665",
-    palette: ["#1a1a2a", "#c9b072", "#5a7088"],
-  },
-  {
-    title: "The Persistence of Memory",
-    artist: "Salvador Dalí",
-    year: "1931",
-    palette: ["#c9a87a", "#3a4a3a", "#5a3a2a"],
-  },
-  {
-    title: "Les Demoiselles d'Avignon",
-    artist: "Pablo Picasso",
-    year: "1907",
-    palette: ["#d4b09a", "#5a4a52", "#3a2a32"],
-  },
-  {
-    title: "The Birth of Venus",
-    artist: "Sandro Botticelli",
-    year: "1486",
-    palette: ["#a0b89a", "#d4c8a8", "#7a5a4a"],
-  },
-  { title: "Geraniums", artist: "Henri Matisse", year: "1910", palette: ["#d65a3a", "#3a8a4a", "#e8a072"] },
-]
-
 interface AlbumSheetProps {
   open: boolean
   onClose: () => void
@@ -59,6 +24,21 @@ interface AlbumSheetProps {
 }
 
 type Tab = "recognized" | "popular" | "local"
+
+/**
+ * Shape returned by `GET /api/artwork/popular`. Each entry preserves the
+ * curated title/artist/year we want to label, plus the resolved HAM record
+ * (or null if no match was found, in which case we fall back to a gradient
+ * tile so the layout never breaks).
+ */
+interface PopularEntry {
+  title: string
+  artist: string
+  year: string
+  artwork: Artwork | null
+}
+
+const POPULAR_CACHE_KEY = "bitsy_popular_v2"
 
 export function AlbumSheet({
   open,
@@ -235,38 +215,149 @@ function RecognizedList({
   )
 }
 
+/**
+ * Curated popular works pulled live from the Harvard Art Museums API. The
+ * server route resolves each title/artist pair and returns the high-resolution
+ * `primaryimageurl`, which we render directly. Results are cached in
+ * localStorage so the album opens instantly on repeat visits.
+ */
 function PopularGrid({ onPick }: { onPick: (rec: Recognition) => void }) {
+  const [entries, setEntries] = useState<PopularEntry[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Try cache first for an instant render
+    try {
+      const cached = localStorage.getItem(POPULAR_CACHE_KEY)
+      if (cached) {
+        const parsed = JSON.parse(cached) as { entries: PopularEntry[]; ts: number }
+        if (parsed.entries && Date.now() - parsed.ts < 24 * 60 * 60 * 1000) {
+          setEntries(parsed.entries)
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    let cancelled = false
+    fetch("/api/artwork/popular")
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.statusText)))
+      .then((data: { entries: PopularEntry[] }) => {
+        if (cancelled) return
+        setEntries(data.entries)
+        try {
+          localStorage.setItem(
+            POPULAR_CACHE_KEY,
+            JSON.stringify({ entries: data.entries, ts: Date.now() }),
+          )
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setError(typeof e === "string" ? e : "Failed to load popular works")
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (error && !entries) {
+    return (
+      <p className="mt-12 text-center font-mono text-xs leading-relaxed text-white/45">{error}</p>
+    )
+  }
+
+  if (!entries) {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex flex-col gap-2 rounded-2xl border border-white/8 bg-white/5 p-3"
+          >
+            <div className="aspect-[3/4] w-full animate-pulse rounded-xl bg-white/10" />
+            <div className="space-y-1.5">
+              <div className="h-3 w-3/4 animate-pulse rounded bg-white/10" />
+              <div className="h-2.5 w-1/2 animate-pulse rounded bg-white/5" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="grid grid-cols-2 gap-3">
-      {POPULAR_WORKS.map((w) => (
-        <button
-          key={w.title}
-          type="button"
-          onClick={() =>
-            onPick({
-              recognized: true,
-              title: w.title,
-              artist: w.artist,
-              year: w.year,
-              confidence: 1,
-            })
-          }
-          className="group flex flex-col gap-2 rounded-2xl border border-white/8 bg-white/5 p-3 text-left transition-colors hover:border-white/20 hover:bg-white/10"
-        >
-          <div
-            className="aspect-[3/4] w-full rounded-xl"
-            style={{ background: `linear-gradient(135deg, ${w.palette.join(", ")})` }}
-            aria-hidden="true"
-          />
-          <div>
-            <p className="font-mono text-[12px] leading-tight text-white">{w.title}</p>
-            <p className="mt-0.5 font-mono text-[10px] text-white/55">
-              {w.artist}, {w.year}
-            </p>
-          </div>
-        </button>
+      {entries.map((entry) => (
+        <PopularTile key={`${entry.title}-${entry.artist}`} entry={entry} onPick={onPick} />
       ))}
     </div>
+  )
+}
+
+function PopularTile({
+  entry,
+  onPick,
+}: {
+  entry: PopularEntry
+  onPick: (rec: Recognition) => void
+}) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const imageUrl = entry.artwork?.primaryimageurl
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onPick({
+          recognized: true,
+          title: entry.title,
+          artist: entry.artist,
+          year: entry.year,
+          confidence: 1,
+        })
+      }
+      className="group flex flex-col gap-2 rounded-2xl border border-white/8 bg-white/5 p-3 text-left transition-colors hover:border-white/20 hover:bg-white/10"
+    >
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-foreground/40">
+        {imageUrl && !imgFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt={`${entry.title} by ${entry.artist}`}
+            loading="lazy"
+            onError={() => setImgFailed(true)}
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+        ) : (
+          // Fallback gradient — uses the artwork's HAM-extracted palette when
+          // possible, otherwise a neutral wash. Keeps the grid tidy if a
+          // particular work has no usable image.
+          <div
+            className="h-full w-full"
+            style={{
+              background:
+                entry.artwork?.colors && entry.artwork.colors.length > 0
+                  ? `linear-gradient(135deg, ${entry.artwork.colors.slice(0, 3).join(", ")})`
+                  : "linear-gradient(135deg, #3a3a42, #1f1f25)",
+            }}
+            aria-hidden="true"
+          />
+        )}
+      </div>
+      <div>
+        <p className="line-clamp-2 font-mono text-[12px] leading-tight text-white">
+          {entry.title}
+        </p>
+        <p className="mt-0.5 line-clamp-1 font-mono text-[10px] text-white/55">
+          {entry.artist}
+          {entry.year ? `, ${entry.year}` : ""}
+        </p>
+      </div>
+    </button>
   )
 }
 

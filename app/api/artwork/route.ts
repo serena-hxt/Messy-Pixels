@@ -1,18 +1,24 @@
 import { NextResponse } from "next/server"
-import { fetchArtworkById, searchArtworks } from "@/lib/ham-api"
+import { fetchArtworkById, findBestMatch, searchArtworks } from "@/lib/ham-api"
 
 /**
  * GET /api/artwork
  *
- * Two modes:
- *   1. ?id=12345         — fetch a single artwork by HAM object id
- *   2. ?q=Matisse        — search (also accepts size, page, classification, sort)
+ * Three modes:
+ *   1. ?id=12345                       — fetch a single artwork by HAM object id
+ *   2. ?title=...&artist=...           — return the SINGLE best match for a
+ *                                        (title, artist) pair. Used by the
+ *                                        lens-view digital twin.
+ *   3. ?q=Matisse                      — search (also accepts size, page,
+ *                                        classification, sort)
  *
- * Both return the trimmed `Artwork` projection used by `SelectedArtworkContext`.
+ * All modes return the trimmed `Artwork` projection used by
+ * `SelectedArtworkContext`.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const idParam = url.searchParams.get("id")
+  const title = url.searchParams.get("title")
 
   try {
     if (idParam) {
@@ -21,6 +27,12 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Invalid id" }, { status: 400 })
       }
       const artwork = await fetchArtworkById(id)
+      return NextResponse.json({ artwork })
+    }
+
+    if (title) {
+      const artist = url.searchParams.get("artist") ?? undefined
+      const artwork = await findBestMatch({ title, artist })
       return NextResponse.json({ artwork })
     }
 
