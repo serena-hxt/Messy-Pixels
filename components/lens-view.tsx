@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ChevronRight, Menu, RotateCcw, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AlbumSheet, type Recognition, type RecognizedHistoryItem } from "@/components/album-sheet"
+import { ArtworkComments } from "@/components/artwork-comments"
 import { useSelectedArtwork } from "@/contexts/selected-artwork-context"
 import type { Artwork } from "@/lib/ham-api"
 
@@ -409,10 +410,11 @@ export function LensView({ onClose }: LensViewProps) {
               </button>
             </div>
 
-            {/* Title / artist label at the bottom */}
-            <div className="absolute inset-x-0 bottom-36 z-10 flex justify-center px-6">
+            {/* Bottom panel: title, artist, and comments */}
+            <div className="absolute inset-x-0 bottom-8 z-10 flex flex-col gap-3 px-5">
+              {/* Title / artist label */}
               <div
-                className="max-w-[88%] rounded-2xl border border-white/20 bg-black/40 px-5 py-3 text-left backdrop-blur-2xl"
+                className="rounded-2xl border border-white/20 bg-black/40 px-5 py-3 text-left backdrop-blur-2xl"
                 style={{ boxShadow: "0 18px 40px -16px rgba(0,0,0,0.55)" }}
               >
                 <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-white/55">
@@ -426,6 +428,9 @@ export function LensView({ onClose }: LensViewProps) {
                   {displayYear ? ` · ${displayYear}` : ""}
                 </p>
               </div>
+
+              {/* Comments section */}
+              <ArtworkComments artworkId={digitalTwin.id} />
             </div>
           </motion.div>
         )}
