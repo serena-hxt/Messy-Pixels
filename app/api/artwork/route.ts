@@ -32,7 +32,8 @@ export async function GET(request: Request) {
 
     if (title) {
       const artist = url.searchParams.get("artist") ?? undefined
-      const artwork = await findBestMatch({ title, artist })
+      const year = url.searchParams.get("year") ?? undefined
+      const artwork = await findBestMatch({ title, artist, year })
       return NextResponse.json({ artwork })
     }
 

@@ -103,13 +103,17 @@ export function LensView({ onClose }: LensViewProps) {
 
     const title = recognition.title
     const artist = recognition.artist
-    const key = `${title}::${artist}`
+    const year = recognition.year
+    const key = `${title}::${artist}::${year ?? ""}`
 
     let cancelled = false
     setTwinLoading(true)
 
+    // Pass year (when known) so HAM's strict q-builder can disambiguate
+    // titles that recur across years — e.g. multiple "Self-Portrait" works.
     const params = new URLSearchParams({ title })
     if (artist) params.set("artist", artist)
+    if (year) params.set("year", year)
 
     fetch(`/api/artwork?${params.toString()}`)
       .then((res) => (res.ok ? res.json() : null))
@@ -118,7 +122,8 @@ export function LensView({ onClose }: LensViewProps) {
         if (cancelled) return
         const art = data?.artwork ?? null
         // Only commit if recognition didn't change while we were fetching.
-        const stillCurrent = `${recognition.title}::${recognition.artist}` === key
+        const stillCurrent =
+          `${recognition.title}::${recognition.artist}::${recognition.year ?? ""}` === key
         if (stillCurrent) {
           setDigitalTwin(art)
           if (art) setArtwork(art)

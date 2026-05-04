@@ -35,9 +35,14 @@ export async function GET() {
     // Resolve all lookups in parallel — HAM is rate-tolerant for ~10 reqs.
     const entries: PopularEntry[] = await Promise.all(
       POPULAR_LIST.map(async (item) => {
-        const artwork = await findBestMatch({ title: item.title, artist: item.artist }).catch(
-          () => null,
-        )
+        // Pass the year hint so the strict field-prefixed q-builder can use
+        // it to disambiguate when multiple HAM records share a title (e.g.
+        // Pollock has many "No. 2" entries across years).
+        const artwork = await findBestMatch({
+          title: item.title,
+          artist: item.artist,
+          year: item.year,
+        }).catch(() => null)
         return {
           title: item.title,
           artist: item.artist ?? "Anonymous",
