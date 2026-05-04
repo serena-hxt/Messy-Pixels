@@ -32,9 +32,11 @@ const HISTORY_KEY = "bitsy_recognized_v1"
 
 interface LensViewProps {
   onClose: () => void
+  /** Called when user taps an AI question prompt — closes the lens and fires a chat message */
+  onAskAI?: (question: string) => void
 }
 
-export function LensView({ onClose }: LensViewProps) {
+export function LensView({ onClose, onAskAI }: LensViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -58,6 +60,10 @@ export function LensView({ onClose }: LensViewProps) {
   // whenever the recognition is dropped (e.g. user re-points the camera).
   const [digitalTwin, setDigitalTwin] = useState<Artwork | null>(null)
   const [twinLoading, setTwinLoading] = useState(false)
+
+  // Comment panel state — lives inside the twin overlay, toggled by the
+  // same ON|OFF button position as the lens danmaku toggle.
+  const [twinCommentsOpen, setTwinCommentsOpen] = useState(false)
 
   // Load persisted recognition history
   useEffect(() => {
@@ -398,7 +404,7 @@ export function LensView({ onClose }: LensViewProps) {
               }}
             />
 
-            {/* × close button — dismisses the twin, returns to live camera */}
+            {/* Top bar inside twin: × close (left) + Comments ON|OFF (right) */}
             <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 pt-5">
               <button
                 type="button"
@@ -408,10 +414,39 @@ export function LensView({ onClose }: LensViewProps) {
               >
                 ×
               </button>
+
+              {/* Comments toggle — same position/style as lens danmaku ON|OFF */}
+              <button
+                type="button"
+                onClick={() => setTwinCommentsOpen((v) => !v)}
+                aria-label={twinCommentsOpen ? "Hide comments" : "Show comments"}
+                aria-pressed={twinCommentsOpen}
+                className="font-mono text-[13px] tracking-[0.18em] text-white/85 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              >
+                <span className={cn("transition-colors", twinCommentsOpen ? "text-rose-400" : "text-white/40")}>ON</span>
+                <span className="mx-2 text-white/30">|</span>
+                <span className={cn("transition-colors", !twinCommentsOpen ? "text-rose-400" : "text-white/40")}>OFF</span>
+              </button>
             </div>
 
-            {/* Bottom panel: title, artist, and comments */}
-            <div className="absolute inset-x-0 bottom-8 z-10 flex flex-col gap-3 px-5">
+            {/* Comment input + viewer — appears below the top bar when ON */}
+            <AnimatePresence>
+              {twinCommentsOpen && (
+                <motion.div
+                  key="twin-comments"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-x-5 top-[72px] z-10"
+                >
+                  <ArtworkComments artworkId={digitalTwin.id} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Bottom panel: title + 2 AI question prompts */}
+            <div className="absolute inset-x-0 bottom-8 z-10 flex flex-col gap-2.5 px-5">
               {/* Title / artist label */}
               <div
                 className="rounded-2xl border border-white/20 bg-black/40 px-5 py-3 text-left backdrop-blur-2xl"
@@ -429,8 +464,31 @@ export function LensView({ onClose }: LensViewProps) {
                 </p>
               </div>
 
-              {/* Comments section */}
-              <ArtworkComments artworkId={digitalTwin.id} />
+              {/* AI question prompts — clicking sends the question to Bitsy and closes the lens */}
+              {[
+                `What makes "${digitalTwin.title}" by ${digitalTwin.artist} significant in art history?`,
+                `If I were standing in front of "${digitalTwin.title}", what details should I look for first?`,
+              ].map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  onClick={() => {
+                    onAskAI?.(question)
+                  }}
+                  className="group flex items-center gap-3 rounded-xl border border-white/18 bg-black/35 px-4 py-3 text-left backdrop-blur-xl transition-colors hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                  style={{ boxShadow: "0 8px 20px -10px rgba(0,0,0,0.5)" }}
+                >
+                  <span className="flex-1 font-mono text-[12px] leading-relaxed text-white/80 group-hover:text-white">
+                    {question}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="shrink-0 font-mono text-[13px] text-white/35 transition-transform group-hover:translate-x-0.5 group-hover:text-white/60"
+                  >
+                    →
+                  </span>
+                </button>
+              ))}
             </div>
           </motion.div>
         )}

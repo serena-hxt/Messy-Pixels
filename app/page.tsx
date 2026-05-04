@@ -223,7 +223,15 @@ export default function HomePage() {
 
         {/* Overlays — all use `fixed inset-0`, but the frame's transform
             containing block clips them inside the phone shape on desktop. */}
-        {lensOpen && <LensView onClose={() => setLensOpen(false)} />}
+        {lensOpen && (
+          <LensView
+            onClose={() => setLensOpen(false)}
+            onAskAI={(question) => {
+              setLensOpen(false)
+              sendMessage({ text: question })
+            }}
+          />
+        )}
 
         <MenuDrawer
           open={menuOpen}
