@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { SelectedArtworkProvider } from "@/contexts/selected-artwork-context"
 import "./globals.css"
 
 const inter = Inter({
@@ -38,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`bg-background ${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="font-sans antialiased">
-        {children}
+        <SelectedArtworkProvider>{children}</SelectedArtworkProvider>
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>
