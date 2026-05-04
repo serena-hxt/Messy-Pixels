@@ -61,8 +61,25 @@ export function ChatThread({ messages, status, drawings = [], error, onAsk }: Ch
 
   const isWaiting = status === "submitted"
 
+  // The id of the most recent assistant message — follow-up question chips
+  // attach to it (and only it) so they always sit under the freshest answer.
+  const lastAssistantId = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return messages[i].id
+    }
+    return null
+  })()
+
+  // The moment the user submits a new message (or a new answer starts streaming),
+  // clear any stale suggestions so they don't briefly cling to the old answer.
+  useEffect(() => {
+    if (status === "submitted" || status === "streaming") {
+      setSuggestedQuestions([])
+    }
+  }, [status])
+
   // When the last message is from the assistant and we're done streaming,
-  // generate contextual follow-up questions
+  // generate contextual follow-up questions for it.
   useEffect(() => {
     if (status !== "ready" || !onAsk) return
     const lastMsg = messages[messages.length - 1]
@@ -76,17 +93,22 @@ export function ChatThread({ messages, status, drawings = [], error, onAsk }: Ch
       return
     }
 
-    // Fetch follow-up question suggestions from the API
+    let cancelled = false
     fetch("/api/suggest-questions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answer: text }),
     })
       .then((res) => res.json())
-      .catch(() => [])
+      .catch(() => ({ questions: [] }))
       .then((data) => {
+        if (cancelled) return
         setSuggestedQuestions((data.questions as string[]) || [])
       })
+
+    return () => {
+      cancelled = true
+    }
   }, [messages, status, onAsk])
 
   // Interleave messages and drawings chronologically. Messages get incrementing
@@ -143,32 +165,72 @@ export function ChatThread({ messages, status, drawings = [], error, onAsk }: Ch
           const text = getMessageText(m)
           if (!text) return null
           const isUser = m.role === "user"
+
+          // Determine whether this assistant message is the latest one — only
+          // the most recent answer carries follow-up question chips beneath it.
+          const isLatestAssistant =
+            !isUser && m.id === lastAssistantId && status === "ready" && suggestedQuestions.length > 0
+
           return (
-            <div key={item.key} className={isUser ? "flex justify-end" : "flex justify-start"}>
-              <div
-                className={
-                  isUser
-                    ? "max-w-[82%] rounded-[20px] rounded-br-[6px] bg-foreground px-4 py-2.5 font-mono text-[13px] font-light leading-relaxed text-background"
-                    : "max-w-[88%] rounded-[20px] rounded-bl-[6px] bg-background/75 px-4 py-2.5 font-mono text-[13px] font-light leading-relaxed text-foreground backdrop-blur-xl"
-                }
-                style={
-                  isUser
-                    ? undefined
-                    : {
-                        border: "0.75px solid rgba(26,26,31,0.14)",
-                        boxShadow: "0 8px 20px -14px rgba(60, 70, 90, 0.18)",
-                      }
-                }
-              >
-                {!isUser && (
-                  <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45">
-                    bitsy
+            <div key={item.key} className="flex flex-col gap-2">
+              <div className={isUser ? "flex justify-end" : "flex justify-start"}>
+                <div
+                  className={
+                    isUser
+                      ? "max-w-[82%] rounded-[20px] rounded-br-[6px] bg-foreground px-4 py-2.5 font-mono text-[13px] font-light leading-relaxed text-background"
+                      : "max-w-[88%] rounded-[20px] rounded-bl-[6px] bg-background/75 px-4 py-2.5 font-mono text-[13px] font-light leading-relaxed text-foreground backdrop-blur-xl"
+                  }
+                  style={
+                    isUser
+                      ? undefined
+                      : {
+                          border: "0.75px solid rgba(26,26,31,0.14)",
+                          boxShadow: "0 8px 20px -14px rgba(60, 70, 90, 0.18)",
+                        }
+                  }
+                >
+                  {!isUser && (
+                    <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45">
+                      bitsy
+                    </p>
+                  )}
+                  <p className="whitespace-pre-wrap text-pretty">
+                    {isUser ? text : renderRichText(text)}
                   </p>
-                )}
-                <p className="whitespace-pre-wrap text-pretty">
-                  {isUser ? text : renderRichText(text)}
-                </p>
+                </div>
               </div>
+
+              {/* Follow-up question chips — appear directly under this Bitsy
+                  answer once suggestions for it have arrived. */}
+              {isLatestAssistant && onAsk && (
+                <div className="ml-1 flex flex-col gap-2 pt-1">
+                  {suggestedQuestions.map((q, i) => (
+                    <button
+                      key={`${m.id}-q-${i}`}
+                      type="button"
+                      onClick={() => onAsk(q)}
+                      className="group flex w-full max-w-[88%] items-center justify-between gap-3 self-start rounded-full bg-background/70 px-4 py-2.5 text-left backdrop-blur-md transition-colors hover:bg-background/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      style={{
+                        border: "0.75px solid rgba(26,26,31,0.15)",
+                        boxShadow: "0 8px 22px -16px rgba(60, 70, 90, 0.18)",
+                        opacity: 0,
+                        transform: "translateY(8px)",
+                        animation: `meta-rise 420ms ease-out ${80 + i * 110}ms both`,
+                      }}
+                    >
+                      <span className="font-mono text-[12.5px] font-light text-foreground/85 group-hover:text-foreground">
+                        {q}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="font-mono text-[14px] text-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground/70"
+                      >
+                        →
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}
