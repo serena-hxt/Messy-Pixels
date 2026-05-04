@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
+import { AnimatePresence, motion } from "framer-motion"
 import { AuraBackground } from "@/components/aura-background"
 import { TopBar } from "@/components/top-bar"
 import { BitsyCard } from "@/components/bitsy-card"
@@ -128,66 +129,118 @@ export default function HomePage() {
   }
 
   return (
-    <>
-      <main className="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col md:max-w-lg lg:max-w-2xl">
-        <AuraBackground />
+    /*
+      Outer "platform" — only visible on desktop. On mobile/tablet the inner
+      frame fills the viewport, so this wrapper is invisible. On desktop
+      (md+) the inner frame becomes a centered phone-shaped container with
+      a soft floating shadow against a muted neutral surface.
+    */
+    <div
+      className="min-h-[100dvh] w-full bg-background md:flex md:items-center md:justify-center md:bg-[#e9ebef] md:p-6 lg:p-10"
+    >
+      {/*
+        The phone-frame. The `transform: translateZ(0)` creates a containing
+        block for `position: fixed` descendants, which keeps overlays
+        (LensView, MenuDrawer, ProfileView, HistoryView, GalleryView,
+        AuraBackground) clipped to this frame on desktop instead of escaping
+        to the viewport. On mobile the frame just fills the screen.
+      */}
+      <div
+        className="relative h-[100dvh] w-full overflow-hidden bg-background md:h-[860px] md:max-h-[92vh] md:w-[420px] md:rounded-[44px] lg:w-[440px]"
+        style={{
+          transform: "translateZ(0)",
+          isolation: "isolate",
+          // Soft floating shadow + 1px inner highlight only on desktop
+          boxShadow:
+            "var(--frame-shadow, none)",
+        }}
+      >
+        <main className="relative flex h-full w-full flex-col">
+          <AuraBackground />
 
-        <TopBar
-          onBack={canvasOpen ? () => canvasCloseRef.current?.() : undefined}
-          onMenu={canvasOpen ? undefined : () => setMenuOpen(true)}
+          <TopBar
+            onBack={canvasOpen ? () => canvasCloseRef.current?.() : undefined}
+            onMenu={canvasOpen ? undefined : () => setMenuOpen(true)}
+          />
+
+          {/*
+            Crossfade between Chat and Canvas modes so the SelectedArtworkContext
+            transition feels seamless. AnimatePresence with mode="wait" ensures
+            the outgoing view fully fades before the incoming one mounts, which
+            avoids stutter from canvas resize observers.
+          */}
+          <AnimatePresence mode="wait" initial={false}>
+            {canvasOpen ? (
+              <motion.section
+                key="canvas-mode"
+                initial={{ opacity: 0, scale: 0.985 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.99 }}
+                transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                className="flex flex-1 flex-col"
+              >
+                <ChatSnippet messages={messages} />
+                <CanvasView
+                  prompt={canvasPrompt}
+                  onClose={handleCanvasClose}
+                  closeRef={canvasCloseRef}
+                  startWithReference={canvasStartWithReference}
+                />
+              </motion.section>
+            ) : (
+              <motion.section
+                key="chat-mode"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                className="flex flex-1 flex-col"
+              >
+                {hasConversation ? (
+                  <ChatThread
+                    messages={messages}
+                    status={status}
+                    drawings={drawings}
+                    error={error}
+                    onAsk={(question) => sendMessage({ text: question })}
+                    onEditOnArtwork={handleEditOnArtwork}
+                  />
+                ) : (
+                  <BitsyCard onAsk={(question) => sendMessage({ text: question })} />
+                )}
+                <InteractionBar
+                  input={input}
+                  onInputChange={setInput}
+                  onSubmit={handleSubmit}
+                  onCamera={() => setLensOpen(true)}
+                  onCanvas={() => setCanvasOpen(true)}
+                  status={status}
+                />
+              </motion.section>
+            )}
+          </AnimatePresence>
+        </main>
+
+        {/* Overlays — all use `fixed inset-0`, but the frame's transform
+            containing block clips them inside the phone shape on desktop. */}
+        {lensOpen && <LensView onClose={() => setLensOpen(false)} />}
+
+        <MenuDrawer
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          onNavigate={(dest) => setActiveView(dest)}
         />
 
-        {canvasOpen ? (
-          <>
-            <ChatSnippet messages={messages} />
-            <CanvasView
-              prompt={canvasPrompt}
-              onClose={handleCanvasClose}
-              closeRef={canvasCloseRef}
-              startWithReference={canvasStartWithReference}
-            />
-          </>
-        ) : (
-          <>
-            {hasConversation ? (
-              <ChatThread
-                messages={messages}
-                status={status}
-                drawings={drawings}
-                error={error}
-                onAsk={(question) => sendMessage({ text: question })}
-                onEditOnArtwork={handleEditOnArtwork}
-              />
-            ) : (
-              <BitsyCard onAsk={(question) => sendMessage({ text: question })} />
-            )}
-            <InteractionBar
-              input={input}
-              onInputChange={setInput}
-              onSubmit={handleSubmit}
-              onCamera={() => setLensOpen(true)}
-              onCanvas={() => setCanvasOpen(true)}
-              status={status}
-            />
-          </>
+        {activeView === "profile" && (
+          <ProfileView onClose={() => setActiveView(null)} drawingsCount={drawings.length} />
         )}
-      </main>
-
-      {lensOpen && <LensView onClose={() => setLensOpen(false)} />}
-
-      <MenuDrawer
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        onNavigate={(dest) => setActiveView(dest)}
-      />
-
-      {activeView === "profile" && (
-        <ProfileView onClose={() => setActiveView(null)} drawingsCount={drawings.length} />
-      )}
-      {activeView === "history" && (
-        <HistoryView onClose={() => setActiveView(null)} activeSessionId={sessionIdRef.current} />
-      )}
-      {activeView === "gallery" && <GalleryView onClose={() => setActiveView(null)} drawings={drawings} />}
-    </>
+        {activeView === "history" && (
+          <HistoryView onClose={() => setActiveView(null)} activeSessionId={sessionIdRef.current} />
+        )}
+        {activeView === "gallery" && (
+          <GalleryView onClose={() => setActiveView(null)} drawings={drawings} />
+        )}
+      </div>
+    </div>
   )
 }

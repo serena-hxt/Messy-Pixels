@@ -311,6 +311,12 @@ export function LensView({ onClose }: LensViewProps) {
   const displayArtist = digitalTwin?.artist || recognition?.artist || ""
   const displayYear = recognition?.year || ""
 
+  // Soft error state — Bitsy recognized the painting from the camera but the
+  // HAM lookup didn't return a record for it. We still show the recognition
+  // metadata so the user knows what was identified, but add a gentle "still
+  // learning" note in place of the digital-twin overlay.
+  const twinMissing = !!recognition?.recognized && !twinLoading && !digitalTwin
+
   return (
     <div
       className={cn(
@@ -446,7 +452,7 @@ export function LensView({ onClose }: LensViewProps) {
               onChange={(e) => setCommentInput(e.target.value)}
               placeholder={
                 recognition?.recognized
-                  ? `Comment on ${recognition.title}…`
+                  ? `Comment on ${recognition.title}��`
                   : "Spot an artwork to leave a comment…"
               }
               disabled={!recognition?.recognized}
@@ -506,7 +512,7 @@ export function LensView({ onClose }: LensViewProps) {
               style={{ boxShadow: "0 18px 40px -16px rgba(0,0,0,0.55)" }}
             >
               <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-white/55">
-                {twinLoading ? "restoring" : "now viewing"}
+                {twinLoading ? "restoring" : twinMissing ? "still learning" : "now viewing"}
               </p>
               <p className="font-mono text-[14px] leading-tight text-white">
                 {displayTitle}
@@ -515,6 +521,11 @@ export function LensView({ onClose }: LensViewProps) {
                 {displayArtist}
                 {displayYear ? ` · ${displayYear}` : ""}
               </p>
+              {twinMissing && (
+                <p className="mt-1.5 font-mono text-[10.5px] font-light italic leading-relaxed text-white/55">
+                  Bitsy is still learning about this piece…
+                </p>
+              )}
             </button>
           </motion.div>
         )}

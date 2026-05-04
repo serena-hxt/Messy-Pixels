@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import type { Artwork } from "@/lib/ham-api"
+import { SoftStateMessage } from "@/components/soft-state-message"
 
 /* -------------------------------------------------------------------------- */
 /* In-memory dedupe cache                                                     */
@@ -73,9 +74,17 @@ export function ArtworkCard({ title, artist, onSelect, onEditOnArtwork }: Artwor
     }
   }, [title, artist])
 
-  // If HAM has no record, render nothing — Bitsy's prose already mentions
-  // the work, so a broken card would be noise rather than helpful.
-  if (status === "missing") return null
+  // If HAM has no record, fall back to a soft, low-stakes "still learning"
+  // message instead of silently dropping the reference. This keeps the chat
+  // honest: Bitsy mentioned the work but couldn't pull a card for it.
+  if (status === "missing") {
+    return (
+      <SoftStateMessage
+        label="harvard art museums"
+        message={`Bitsy is still learning about ${title}…`}
+      />
+    )
+  }
 
   if (status === "loading" || !artwork) {
     return (

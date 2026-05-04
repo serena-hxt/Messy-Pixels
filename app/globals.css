@@ -57,6 +57,24 @@
   html {
     @apply bg-background;
   }
+
+  /*
+    Phone-frame visual on desktop only. On mobile the frame fills the
+    viewport so we leave the shadow off (no visible edge). At the md+
+    breakpoint the frame becomes a centered floating container with a
+    soft drop shadow and a 1px inner highlight to suggest a glass surface.
+  */
+  @media (min-width: 768px) {
+    :root {
+      --frame-shadow:
+        0 40px 80px -32px rgba(60, 70, 90, 0.32),
+        0 12px 28px -16px rgba(60, 70, 90, 0.16),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+    }
+    html {
+      background: #e9ebef;
+    }
+  }
 }
 
 @layer utilities {
