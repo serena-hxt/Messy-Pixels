@@ -14,7 +14,6 @@ import { LensView } from "@/components/lens-view"
 import { CanvasView } from "@/components/canvas-view"
 import { MenuDrawer, type MenuDestination } from "@/components/menu-drawer"
 import { ProfileView } from "@/components/profile-view"
-import { HistoryView } from "@/components/history-view"
 import { GalleryView } from "@/components/gallery-view"
 import { deriveSessionTitle, upsertSession, type ChatSession } from "@/lib/storage"
 import { useSelectedArtwork, type Artwork } from "@/contexts/selected-artwork-context"
@@ -236,14 +235,22 @@ export default function HomePage() {
         <MenuDrawer
           open={menuOpen}
           onClose={() => setMenuOpen(false)}
-          onNavigate={(dest) => setActiveView(dest)}
+          activeSessionId={sessionIdRef.current}
+          onNavigate={(dest) => {
+            if (dest === "new-chat") {
+              // Reset session refs so the next message starts a fresh conversation.
+              // The useChat hook is stateful so we reload the page to clear messages.
+              sessionIdRef.current = null
+              sessionStartedRef.current = null
+              window.location.reload()
+            } else {
+              setActiveView(dest)
+            }
+          }}
         />
 
         {activeView === "profile" && (
           <ProfileView onClose={() => setActiveView(null)} drawingsCount={drawings.length} />
-        )}
-        {activeView === "history" && (
-          <HistoryView onClose={() => setActiveView(null)} activeSessionId={sessionIdRef.current} />
         )}
         {activeView === "gallery" && (
           <GalleryView onClose={() => setActiveView(null)} drawings={drawings} />
