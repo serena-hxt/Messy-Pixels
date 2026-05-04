@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Image from "next/image"
 
 interface Ripple {
@@ -24,7 +24,20 @@ const SUGGESTED_QUESTIONS = [
 
 export function BitsyCard({ onAsk }: BitsyCardProps) {
   const [flipped, setFlipped] = useState(false)
+  const [showQuestions, setShowQuestions] = useState(false)
   const [ripples, setRipples] = useState<Ripple[]>([])
+
+  // After the card flips, wait 3s of dwell time before revealing the
+  // suggested questions (and letting the card glide upward to make room).
+  // Flipping back instantly hides them again.
+  useEffect(() => {
+    if (!flipped) {
+      setShowQuestions(false)
+      return
+    }
+    const t = window.setTimeout(() => setShowQuestions(true), 3000)
+    return () => window.clearTimeout(t)
+  }, [flipped])
 
   const frontRef = useRef<HTMLDivElement>(null)
   const lastSpawnAtRef = useRef(0)
@@ -234,42 +247,64 @@ export function BitsyCard({ onAsk }: BitsyCardProps) {
           </div>
         </button>
 
-        {/* Follow-up questions — fade in after the flip animation settles */}
-        {flipped && onAsk && (
+        {/*
+          Follow-up questions — always mounted (so the flex parent can smoothly
+          redistribute when they expand), but their container's row height
+          animates 0fr → 1fr after a 3s dwell on the flipped face. The flex
+          centering of the parent <section> then naturally lifts the card
+          upward in sync, instead of snapping when the content first renders.
+        */}
+        {onAsk && (
           <div
-            key="follow-ups"
-            className="mt-5 flex flex-col gap-2"
-            aria-label="Suggested questions about this artwork"
+            aria-hidden={!showQuestions}
+            className="grid transition-[grid-template-rows] duration-[700ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+            style={{
+              gridTemplateRows: showQuestions ? "1fr" : "0fr",
+            }}
           >
-            <p
-              className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45"
-              style={{ animation: "meta-rise 380ms ease-out 550ms both" }}
-            >
-              ask bitsy
-            </p>
-            {SUGGESTED_QUESTIONS.map((question, i) => (
-              <button
-                key={question}
-                type="button"
-                onClick={() => onAsk(question)}
-                className="group flex w-full items-center justify-between gap-3 rounded-full bg-background/70 px-5 py-3 text-left backdrop-blur-md transition-colors hover:bg-background/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                style={{
-                  border: "0.75px solid rgba(26,26,31,0.15)",
-                  boxShadow: "0 8px 22px -16px rgba(60, 70, 90, 0.18)",
-                  animation: `meta-rise 460ms ease-out ${650 + i * 90}ms both`,
-                }}
+            <div className="overflow-hidden">
+              <div
+                className="mt-5 flex flex-col gap-2"
+                aria-label="Suggested questions about this artwork"
               >
-                <span className="font-mono text-[12.5px] font-light text-foreground/85 group-hover:text-foreground">
-                  {question}
-                </span>
-                <span
-                  aria-hidden="true"
-                  className="font-mono text-[14px] text-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground/70"
+                <p
+                  className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45"
+                  style={{
+                    opacity: showQuestions ? 1 : 0,
+                    transform: showQuestions ? "translateY(0)" : "translateY(6px)",
+                    transition: "opacity 380ms ease-out 220ms, transform 380ms ease-out 220ms",
+                  }}
                 >
-                  →
-                </span>
-              </button>
-            ))}
+                  ask bitsy
+                </p>
+                {SUGGESTED_QUESTIONS.map((question, i) => (
+                  <button
+                    key={question}
+                    type="button"
+                    tabIndex={showQuestions ? 0 : -1}
+                    onClick={() => onAsk(question)}
+                    className="group flex w-full items-center justify-between gap-3 rounded-full bg-background/70 px-5 py-3 text-left backdrop-blur-md transition-colors hover:bg-background/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    style={{
+                      border: "0.75px solid rgba(26,26,31,0.15)",
+                      boxShadow: "0 8px 22px -16px rgba(60, 70, 90, 0.18)",
+                      opacity: showQuestions ? 1 : 0,
+                      transform: showQuestions ? "translateY(0)" : "translateY(10px)",
+                      transition: `opacity 460ms ease-out ${320 + i * 120}ms, transform 460ms ease-out ${320 + i * 120}ms`,
+                    }}
+                  >
+                    <span className="font-mono text-[12.5px] font-light text-foreground/85 group-hover:text-foreground">
+                      {question}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="font-mono text-[14px] text-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground/70"
+                    >
+                      →
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
