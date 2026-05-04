@@ -177,13 +177,15 @@ function applyBrushSettings(
   preset: BrushPreset,
   color: string,
   size: number,
+  transparency: number = 100,
 ) {
+  const transparencyMultiplier = transparency / 100
   ctx.lineCap = "round"
   ctx.lineJoin = "round"
   ctx.strokeStyle = color
   ctx.fillStyle = color
   ctx.lineWidth = size * preset.sizeScale
-  ctx.globalAlpha = preset.alpha
+  ctx.globalAlpha = preset.alpha * transparencyMultiplier
   ctx.shadowBlur = preset.blur
   ctx.shadowColor = preset.blur > 0 ? color : "transparent"
 }
@@ -251,6 +253,7 @@ export function CanvasView({
   const [brushType, setBrushType] = useState<BrushType>(initialBrush)
   const [color, setColor] = useState<string>(palette[0] ?? "#1a1a1f")
   const [brushSize, setBrushSize] = useState<number>(4)
+  const [brushTransparency, setBrushTransparency] = useState<number>(100)
   const [note, setNote] = useState<string>("")
   const [hasInk, setHasInk] = useState(false)
 
@@ -288,10 +291,12 @@ export function CanvasView({
   const colorRef = useRef(color)
   const brushSizeRef = useRef(brushSize)
   const brushTypeRef = useRef(brushType)
+  const brushTransparencyRef = useRef(brushTransparency)
   const activeLayerRef = useRef(activeLayer)
   useEffect(() => { colorRef.current = color }, [color])
   useEffect(() => { brushSizeRef.current = brushSize }, [brushSize])
   useEffect(() => { brushTypeRef.current = brushType }, [brushType])
+  useEffect(() => { brushTransparencyRef.current = brushTransparency }, [brushTransparency])
   useEffect(() => { activeLayerRef.current = activeLayer }, [activeLayer])
 
   /* ---------------- Setup all canvases with HiDPI + ResizeObserver ---------------- */
@@ -414,7 +419,7 @@ export function CanvasView({
   const drawDot = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
     const preset = BRUSH_PRESETS[brushTypeRef.current]
     const baseSize = brushSizeRef.current * preset.sizeScale
-    applyBrushSettings(ctx, preset, colorRef.current, brushSizeRef.current)
+      applyBrushSettings(ctx, preset, colorRef.current, brushSizeRef.current, brushTransparencyRef.current)
     ctx.beginPath()
     ctx.arc(x, y, baseSize / 2, 0, Math.PI * 2)
     ctx.fill()
@@ -632,6 +637,7 @@ export function CanvasView({
             color={color}
             brushSize={brushSize}
             brushType={brushType}
+            brushTransparency={brushTransparency}
             palette={palette}
             layers={layers}
             activeLayer={activeLayer}
@@ -641,6 +647,7 @@ export function CanvasView({
             onColorChange={setColor}
             onBrushSizeChange={setBrushSize}
             onBrushTypeChange={setBrushType}
+            onBrushTransparencyChange={setBrushTransparency}
             onLayerSelect={setActiveLayer}
             onLayerToggle={toggleLayerVisibility}
             onReferenceToggle={() => setReferenceEnabled((v) => !v)}
@@ -672,6 +679,7 @@ function DrawToolbar({
   color,
   brushSize,
   brushType,
+  brushTransparency,
   palette,
   layers,
   activeLayer,
@@ -681,6 +689,7 @@ function DrawToolbar({
   onColorChange,
   onBrushSizeChange,
   onBrushTypeChange,
+  onBrushTransparencyChange,
   onLayerSelect,
   onLayerToggle,
   onReferenceToggle,
@@ -692,6 +701,7 @@ function DrawToolbar({
   color: string
   brushSize: number
   brushType: BrushType
+  brushTransparency: number
   palette: string[]
   layers: LayerState[]
   activeLayer: number
@@ -701,6 +711,7 @@ function DrawToolbar({
   onColorChange: (c: string) => void
   onBrushSizeChange: (b: number) => void
   onBrushTypeChange: (b: BrushType) => void
+  onBrushTransparencyChange: (v: number) => void
   onLayerSelect: (i: number) => void
   onLayerToggle: (i: number) => void
   onReferenceToggle: () => void
@@ -836,6 +847,31 @@ function DrawToolbar({
                 />
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {panel === "transparency" && (
+        <div style={panelStyle}>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/55">
+              brush transparency
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={brushTransparency}
+              onChange={(e) => onBrushTransparencyChange(Number(e.target.value))}
+              className="flex-1 accent-foreground"
+              aria-label="Brush transparency"
+            />
+            <span className="w-10 text-right font-mono text-[11px] tabular-nums text-foreground/65">
+              {brushTransparency}%
+            </span>
           </div>
         </div>
       )}
@@ -1027,6 +1063,27 @@ function DrawToolbar({
             className="block h-6 w-6 rounded-full"
             style={{ backgroundColor: color, border: "0.5px solid rgba(26,26,31,0.18)" }}
           />
+        </button>
+
+        {/* Transparency */}
+        <button
+          type="button"
+          onClick={() => togglePanel("transparency")}
+          aria-label="Adjust brush transparency"
+          aria-expanded={panel === "transparency"}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
+          style={{
+            ...neu,
+            border: panel === "transparency" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
+          }}
+          title={`Transparency: ${brushTransparency}%`}
+        >
+          <span
+            className="font-mono text-[10px] font-semibold text-foreground/80"
+            style={{ opacity: brushTransparency / 100 }}
+          >
+            A
+          </span>
         </button>
 
         {/* Spacer */}
