@@ -9,7 +9,20 @@ interface Ripple {
   y: number
 }
 
-export function BitsyCard() {
+interface BitsyCardProps {
+  /**
+   * Called when the user taps one of the follow-up question chips that appear
+   * after the card flips. The question text is sent as if the user typed it.
+   */
+  onAsk?: (question: string) => void
+}
+
+const SUGGESTED_QUESTIONS = [
+  "What makes this painting Fauvist?",
+  "Why did Matisse pair red with green?",
+] as const
+
+export function BitsyCard({ onAsk }: BitsyCardProps) {
   const [flipped, setFlipped] = useState(false)
   const [ripples, setRipples] = useState<Ripple[]>([])
 
@@ -59,7 +72,7 @@ export function BitsyCard() {
   }
 
   return (
-    <section className="flex flex-1 items-center justify-center px-4 py-6 sm:px-8 md:px-12 md:py-10">
+    <section className="flex flex-1 flex-col items-center justify-center px-4 py-6 sm:px-8 md:px-12 md:py-10">
       <div className="perspective-1200 w-full max-w-sm md:max-w-md">
         <button
           type="button"
@@ -220,6 +233,45 @@ export function BitsyCard() {
             </div>
           </div>
         </button>
+
+        {/* Follow-up questions — fade in after the flip animation settles */}
+        {flipped && onAsk && (
+          <div
+            key="follow-ups"
+            className="mt-5 flex flex-col gap-2"
+            aria-label="Suggested questions about this artwork"
+          >
+            <p
+              className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45"
+              style={{ animation: "meta-rise 380ms ease-out 550ms both" }}
+            >
+              ask bitsy
+            </p>
+            {SUGGESTED_QUESTIONS.map((question, i) => (
+              <button
+                key={question}
+                type="button"
+                onClick={() => onAsk(question)}
+                className="group flex w-full items-center justify-between gap-3 rounded-full bg-background/70 px-5 py-3 text-left backdrop-blur-md transition-colors hover:bg-background/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{
+                  border: "0.75px solid rgba(26,26,31,0.15)",
+                  boxShadow: "0 8px 22px -16px rgba(60, 70, 90, 0.18)",
+                  animation: `meta-rise 460ms ease-out ${650 + i * 90}ms both`,
+                }}
+              >
+                <span className="font-mono text-[12.5px] font-light text-foreground/85 group-hover:text-foreground">
+                  {question}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="font-mono text-[14px] text-foreground/35 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground/70"
+                >
+                  →
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

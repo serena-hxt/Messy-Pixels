@@ -133,7 +133,7 @@ export default function HomePage() {
             {hasConversation ? (
               <ChatThread messages={messages} status={status} drawings={drawings} error={error} />
             ) : (
-              <BitsyCard />
+              <BitsyCard onAsk={(question) => sendMessage({ text: question })} />
             )}
             <InteractionBar
               input={input}
