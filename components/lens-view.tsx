@@ -92,10 +92,6 @@ export function LensView({ onClose }: LensViewProps) {
     })
   }, [recognition?.title, recognition?.artist, recognition?.recognized])
 
-  // Auto-dismiss the lens view after the digital twin loads. This creates a
-  // smooth "capture and reveal" flow where the recognized artwork displays
-  // briefly then fades, ready for the user to interact with it in chat or canvas.
-
   // Whenever a confident recognition comes in, fetch the HAM record so we can
   // overlay the Digital Twin and populate the SelectedArtworkContext for the
   // rest of the app (chat, gallery, etc.) to consume.
@@ -141,27 +137,6 @@ export function LensView({ onClose }: LensViewProps) {
       cancelled = true
     }
   }, [recognition?.recognized, recognition?.title, recognition?.artist, setArtwork])
-
-  // Auto-dismiss: Once the digital twin loads and displays (not still loading,
-  // and has a valid artwork record), wait 2.2 seconds then smoothly close the
-  // lens view. This gives the user a moment to see the revealed artwork before
-  // transitioning back to chat/canvas context.
-  useEffect(() => {
-    if (!recognition?.recognized || !digitalTwin || twinLoading) {
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      setExiting(true)
-      window.setTimeout(() => {
-        onClose()
-      }, 380) // Match the exit animation duration
-    }, 2200)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [recognition?.recognized, digitalTwin, twinLoading, onClose])
 
   // Start / restart camera stream when facing changes
   useEffect(() => {
@@ -386,24 +361,25 @@ export function LensView({ onClose }: LensViewProps) {
       />
 
       {/*
-        Digital Twin overlay — when the recognized artwork resolves to a HAM
-        record, fade the high-resolution image in over the camera feed using
-        Framer Motion. The effect is meant to feel like the physical painting
-        is being digitally restored on top of itself.
+        Digital Twin — a full-screen view that takes over the lens when the
+        HAM lookup succeeds. The user stays here until they press × (which
+        returns to the live camera), or press the back chevron (which closes
+        the entire lens). The twin is NOT auto-dismissed.
       */}
       <AnimatePresence>
         {digitalTwin?.primaryimageurl && (
           <motion.div
             key={digitalTwin.id}
-            className="pointer-events-none absolute inset-0 z-[1]"
+            className="absolute inset-0 z-20 flex flex-col"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
-            aria-hidden="true"
           >
-            {/* Soft black backdrop so letterboxed edges feel intentional */}
-            <div className="absolute inset-0 bg-foreground/85" />
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-foreground/92" />
+
+            {/* High-res image */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={digitalTwin.primaryimageurl}
@@ -411,14 +387,46 @@ export function LensView({ onClose }: LensViewProps) {
               className="absolute inset-0 h-full w-full object-contain"
               draggable={false}
             />
-            {/* Subtle gold edge glow to suggest "restoration" finish */}
+
+            {/* Subtle gold restoration glow */}
             <div
-              className="absolute inset-0 mix-blend-overlay"
+              className="pointer-events-none absolute inset-0 mix-blend-overlay"
               style={{
                 background:
-                  "radial-gradient(70% 70% at 50% 50%, transparent 60%, rgba(255, 220, 160, 0.2) 100%)",
+                  "radial-gradient(70% 70% at 50% 50%, transparent 60%, rgba(255, 220, 160, 0.18) 100%)",
               }}
             />
+
+            {/* × close button — dismisses the twin, returns to live camera */}
+            <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 pt-5">
+              <button
+                type="button"
+                aria-label="Close artwork view, return to camera"
+                onClick={clearTwin}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/10 font-mono text-[18px] leading-none text-white/80 backdrop-blur-md transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Title / artist label at the bottom */}
+            <div className="absolute inset-x-0 bottom-36 z-10 flex justify-center px-6">
+              <div
+                className="max-w-[88%] rounded-2xl border border-white/20 bg-black/40 px-5 py-3 text-left backdrop-blur-2xl"
+                style={{ boxShadow: "0 18px 40px -16px rgba(0,0,0,0.55)" }}
+              >
+                <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-white/55">
+                  now viewing
+                </p>
+                <p className="font-mono text-[14px] leading-tight text-white">
+                  {digitalTwin.title}
+                </p>
+                <p className="mt-0.5 font-mono text-[11px] text-white/70">
+                  {digitalTwin.artist}
+                  {displayYear ? ` · ${displayYear}` : ""}
+                </p>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -521,12 +529,12 @@ export function LensView({ onClose }: LensViewProps) {
       )}
 
       {/*
-        Glassmorphic title / artist label — shown whenever the artwork is
-        recognized (whether or not the HAM lookup has returned). It fades in
-        with a small upward translation so it feels grounded under the twin.
+        Glassmorphic "restoring…" / "still learning…" label — shown while the
+        HAM lookup is in flight, or when it returns no record. Hidden once the
+        digital twin is available (the twin overlay takes over from here).
       */}
       <AnimatePresence>
-        {recognition?.recognized && displayTitle && displayArtist && (
+        {recognition?.recognized && displayTitle && displayArtist && !digitalTwin && (
           <motion.div
             key={`${displayTitle}-${displayArtist}`}
             initial={{ opacity: 0, y: 12 }}
@@ -535,11 +543,8 @@ export function LensView({ onClose }: LensViewProps) {
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
             className="absolute inset-x-0 bottom-36 z-10 flex justify-center px-6"
           >
-            <button
-              type="button"
-              onClick={clearTwin}
-              aria-label="Dismiss artwork overlay"
-              className="group max-w-[88%] rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-left backdrop-blur-2xl transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            <div
+              className="max-w-[88%] rounded-2xl border border-white/20 bg-white/10 px-5 py-3 text-left backdrop-blur-2xl"
               style={{ boxShadow: "0 18px 40px -16px rgba(0,0,0,0.55)" }}
             >
               <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-white/55">
@@ -557,7 +562,7 @@ export function LensView({ onClose }: LensViewProps) {
                   Bitsy is still learning about this piece…
                 </p>
               )}
-            </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
