@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { ImageIcon, MessageSquare, PenLine, Trash2, X } from "lucide-react"
-import { getMessageText, loadProfile, loadSessions, saveSessions, type ChatSession, type UserProfile } from "@/lib/storage"
+import { loadProfile, loadSessions, saveSessions, type ChatSession, type UserProfile } from "@/lib/storage"
 
 export type MenuDestination = "profile" | "gallery" | "new-chat"
 
@@ -238,15 +238,6 @@ function SessionItem({
   onOpen: () => void
   onDelete: (e: React.MouseEvent) => void
 }) {
-  const lastMsg = [...session.messages].reverse().find((m) => getMessageText(m).length > 0)
-  const preview = lastMsg ? getMessageText(lastMsg) : "New conversation"
-  const d = new Date(session.updatedAt)
-  const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  const dateLabel = isToday
-    ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
-
   return (
     <li>
       <div
@@ -259,33 +250,26 @@ function SessionItem({
         <button
           type="button"
           onClick={onOpen}
-          className="flex flex-1 items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <MessageSquare
-            className="mt-0.5 h-[15px] w-[15px] shrink-0 text-foreground/35"
+            className="h-[14px] w-[14px] shrink-0 text-foreground/35"
             strokeWidth={1.5}
             aria-hidden="true"
           />
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="flex items-center gap-2">
-              <span className="truncate font-mono text-[12.5px] font-normal leading-snug text-foreground">
-                {session.title}
+          {/* Title wraps naturally — no truncate — so every word stays visible */}
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="break-words font-mono text-[12.5px] font-normal leading-snug text-foreground">
+              {session.title}
+            </span>
+            {isActive && (
+              <span
+                className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[8.5px] uppercase tracking-[0.2em] text-foreground/55"
+                style={{ border: "0.5px solid rgba(26,26,31,0.18)" }}
+              >
+                live
               </span>
-              {isActive && (
-                <span
-                  className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[8.5px] uppercase tracking-[0.2em] text-foreground/55"
-                  style={{ border: "0.5px solid rgba(26,26,31,0.18)" }}
-                >
-                  live
-                </span>
-              )}
-            </span>
-            <span className="truncate font-mono text-[10.5px] font-light leading-snug text-foreground/50">
-              {preview}
-            </span>
-            <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-foreground/35 mt-0.5">
-              {dateLabel} · {session.messages.length} msg
-            </span>
+            )}
           </span>
         </button>
 
