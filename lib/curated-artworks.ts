@@ -110,10 +110,22 @@ export const CURATED_ARTWORKS: CuratedArtwork[] = [
       "Degas dressed his bronze in real fabric and a wig of human hair — sculpture that refused to stay sculpture. Pick one detail of an everyday object and render it more honestly than the rest. Does the realism in one place make everything else feel more dreamlike?",
   },
   {
+    objectid: 228358,
+    title: "Bamboo through the Four Seasons",
+    artist: "Yoo Tok Chang",
+    year: "mid 18th century",
+    fallbackImageUrl:
+      "https://mps.lib.harvard.edu/assets/image/DRS:17386759/full/!3000,3000/0/default.jpg",
+    bitsyPrompt:
+      "Yoo Tok Chang painted bamboo through all four seasons from a single leaf — the growth and decay held in one moment. Choose something in your life that cycles through change. Sketch it as if all its seasons exist at the same time.",
+  },
+  {
     objectid: 228378,
     title: "Landscape (composition cubiste)",
     artist: "Jean Metzinger",
     year: "1912",
+    fallbackImageUrl:
+      "https://scontent-bos5-1.xx.fbcdn.net/v/t39.30808-6/494753288_10229215892597283_3388564043821532722_n.jpg?_nc_cat=108&ccb=1-7&_nc_sid=e06c5d&_nc_ohc=DWcJrFTpgGEQ7kNvwGJqvl5&_nc_oc=AdqWo_LI2SlMOMXMhtn5LfH7MgdouMpp31D69NOwl1zQBfPrDiuSGSTydNgBVdgmBLY&_nc_zt=23&_nc_ht=scontent-bos5-1.xx&_nc_gid=9tsIaDGpvWaQliGNw7FmJA&_nc_ss=7b2a8&oh=00_Af5zN_Y_LPxl-fefxN1Xm6mhGHWEpTyVotyWZ9pafLUC9Q&oe=69FEEFB8",
     bitsyPrompt:
       "Metzinger painted a landscape from several viewpoints at once — the village seen as you'd remember it after walking through it, not as you'd photograph it. Draw a place you know by combining what it looks like, what it sounds like, and what it feels like to be there.",
   },
