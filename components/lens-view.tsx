@@ -92,6 +92,10 @@ export function LensView({ onClose }: LensViewProps) {
     })
   }, [recognition?.title, recognition?.artist, recognition?.recognized])
 
+  // Auto-dismiss the lens view after the digital twin loads. This creates a
+  // smooth "capture and reveal" flow where the recognized artwork displays
+  // briefly then fades, ready for the user to interact with it in chat or canvas.
+
   // Whenever a confident recognition comes in, fetch the HAM record so we can
   // overlay the Digital Twin and populate the SelectedArtworkContext for the
   // rest of the app (chat, gallery, etc.) to consume.
@@ -137,6 +141,27 @@ export function LensView({ onClose }: LensViewProps) {
       cancelled = true
     }
   }, [recognition?.recognized, recognition?.title, recognition?.artist, setArtwork])
+
+  // Auto-dismiss: Once the digital twin loads and displays (not still loading,
+  // and has a valid artwork record), wait 2.2 seconds then smoothly close the
+  // lens view. This gives the user a moment to see the revealed artwork before
+  // transitioning back to chat/canvas context.
+  useEffect(() => {
+    if (!recognition?.recognized || !digitalTwin || twinLoading) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setExiting(true)
+      window.setTimeout(() => {
+        onClose()
+      }, 380) // Match the exit animation duration
+    }, 2200)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [recognition?.recognized, digitalTwin, twinLoading, onClose])
 
   // Start / restart camera stream when facing changes
   useEffect(() => {
@@ -298,7 +323,8 @@ export function LensView({ onClose }: LensViewProps) {
     setCommentInput("")
   }
 
-  // From the album: a user-picked artwork manually applies recognition
+  // From the album: a user-picked artwork manually applies recognition.
+  // This triggers the same digital-twin fetch + auto-dismiss flow as camera recognition.
   function handleSelectFromAlbum(rec: Recognition) {
     setRecognition(rec)
   }
