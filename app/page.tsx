@@ -131,7 +131,13 @@ export default function HomePage() {
         ) : (
           <>
             {hasConversation ? (
-              <ChatThread messages={messages} status={status} drawings={drawings} error={error} />
+              <ChatThread
+                messages={messages}
+                status={status}
+                drawings={drawings}
+                error={error}
+                onAsk={(question) => sendMessage({ text: question })}
+              />
             ) : (
               <BitsyCard onAsk={(question) => sendMessage({ text: question })} />
             )}

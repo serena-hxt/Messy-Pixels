@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { UIMessage } from "ai"
 import type { SavedDrawing } from "@/app/page"
 
@@ -44,20 +44,50 @@ interface ChatThreadProps {
   status: "submitted" | "streaming" | "ready" | "error"
   drawings?: SavedDrawing[]
   error?: Error | null
+  onAsk?: (question: string) => void
 }
 
 type Item =
   | { kind: "msg"; key: string; t: number; node: UIMessage }
   | { kind: "drawing"; key: string; t: number; node: SavedDrawing }
 
-export function ChatThread({ messages, status, drawings = [], error }: ChatThreadProps) {
+export function ChatThread({ messages, status, drawings = [], error, onAsk }: ChatThreadProps) {
   const endRef = useRef<HTMLDivElement>(null)
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-  }, [messages, status, drawings, error])
+  }, [messages, status, drawings, error, suggestedQuestions])
 
   const isWaiting = status === "submitted"
+
+  // When the last message is from the assistant and we're done streaming,
+  // generate contextual follow-up questions
+  useEffect(() => {
+    if (status !== "ready" || !onAsk) return
+    const lastMsg = messages[messages.length - 1]
+    if (!lastMsg || lastMsg.role !== "assistant") {
+      setSuggestedQuestions([])
+      return
+    }
+    const text = getMessageText(lastMsg)
+    if (!text) {
+      setSuggestedQuestions([])
+      return
+    }
+
+    // Fetch follow-up question suggestions from the API
+    fetch("/api/suggest-questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answer: text }),
+    })
+      .then((res) => res.json())
+      .catch(() => [])
+      .then((data) => {
+        setSuggestedQuestions((data.questions as string[]) || [])
+      })
+  }, [messages, status, onAsk])
 
   // Interleave messages and drawings chronologically. Messages get incrementing
   // virtual timestamps based on order so drawings can splice in naturally.
