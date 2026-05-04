@@ -23,11 +23,32 @@ Tone: gentle, observant, a little playful. Avoid emojis. Avoid markdown headers.
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json()
 
-  const result = streamText({
-    model: google("gemini-2.0-flash"),
-    system: SYSTEM_PROMPT,
-    messages: await convertToModelMessages(messages),
-  })
+  try {
+    const result = streamText({
+      // Using gemini-1.5-flash for better rate limits on the free tier
+      model: google("gemini-1.5-flash"),
+      system: SYSTEM_PROMPT,
+      messages: await convertToModelMessages(messages),
+    })
 
-  return result.toUIMessageStreamResponse()
+    return result.toUIMessageStreamResponse()
+  } catch (error) {
+    console.error("[v0] Chat API error:", error)
+    
+    // Check if it's a rate limit error
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    if (errorMessage.includes("quota") || errorMessage.includes("429")) {
+      return new Response(
+        JSON.stringify({
+          error: "Rate limit exceeded. Please wait a moment and try again.",
+        }),
+        { status: 429, headers: { "Content-Type": "application/json" } }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({ error: "Something went wrong. Please try again." }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    )
+  }
 }
