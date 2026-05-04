@@ -352,6 +352,8 @@ function buildStrictQ(input: { title?: string; artist?: string; year?: string })
  * Try to find the single best HAM record for a (title, artist, year) tuple.
  * The escalation order goes from strictest to broadest:
  *
+ *   0. Curated registry — if (title, artist) maps to one of the 10 featured
+ *      works, fetch by Object ID directly (skips fuzzy search entirely)
  *   1. Strict field-prefixed q with title + attribution + dated
  *   2. Strict q with title + attribution (no year)
  *   3. HAM `title` + `person` filter params (looser than q)
@@ -376,6 +378,24 @@ export async function findBestMatch(input: {
     if (!artist) return list[0]
     const lower = artist.toLowerCase()
     return list.find((a) => a.artist.toLowerCase().includes(lower)) ?? list[0]
+  }
+
+  // 0. Curated registry — most reliable path. If the title + artist match
+  // one of our 10 featured works we know the exact HAM Object ID, so we
+  // skip the fuzzy q-builder entirely. Imported lazily to avoid a circular
+  // dependency on this module from inside the curated registry.
+  try {
+    const { findCuratedMatch } = await import("@/lib/curated-artworks")
+    const curated = findCuratedMatch({ title, artist })
+    if (curated) {
+      try {
+        return await fetchArtworkById(curated.objectid)
+      } catch {
+        /* fall through to fuzzy search */
+      }
+    }
+  } catch {
+    /* fall through */
   }
 
   // 1. Strict q with all hints
