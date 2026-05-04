@@ -74,6 +74,8 @@ export const CURATED_ARTWORKS: CuratedArtwork[] = [
     title: "Mural",
     artist: "Joan Miró",
     year: "1935",
+    fallbackImageUrl:
+      "https://media.discordapp.net/attachments/1123424324422991992/1500971182806008010/joanmiro.jpg?ex=69fa5fd8&is=69f90e58&hm=19930d009634974ce1969619f67040d1c11caccc202ed423d5c57d533647714a&=&format=webp&width=1280&height=1707",
     bitsyPrompt:
       "Miró believed the painting begins with a single shape that calls the next one into being. Start with one mark — a circle, a line, a smudge — and let each stroke decide the one that follows, with no plan in mind. Where does the conversation lead you?",
   },
@@ -82,6 +84,8 @@ export const CURATED_ARTWORKS: CuratedArtwork[] = [
     title: "No. 2",
     artist: "Jackson Pollock",
     year: "1950",
+    fallbackImageUrl:
+      "https://s3.amazonaws.com/media.harvardartmuseums.org/production/file_uploads/CalendarEvent/images/000/001/090/hero/43183425_FINAL.jpg",
     bitsyPrompt:
       "Pollock dripped paint while moving around the canvas on the floor — the painting recorded his body, not his hand. Try drawing with your whole arm instead of your wrist. How does the line change when your shoulder is doing the talking?",
   },
@@ -90,6 +94,8 @@ export const CURATED_ARTWORKS: CuratedArtwork[] = [
     title: "Flight",
     artist: "David Smith",
     year: "1951",
+    fallbackImageUrl:
+      "https://i.pinimg.com/1200x/3c/bb/14/3cbb14386cc625750d41c08025e952b6.jpg",
     bitsyPrompt:
       "Smith welded steel lines into the air the way other artists draw on paper — sculpture you can almost see through. Sketch something heavy as if it were weightless. What lifts when you let the negative space carry as much weight as the form?",
   },
