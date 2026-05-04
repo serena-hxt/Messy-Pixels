@@ -121,7 +121,7 @@ export const CURATED_ARTWORKS: CuratedArtwork[] = [
     artist: "Yoo Tok Chang",
     year: "mid 18th century",
     fallbackImageUrl:
-      "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-m4kAUmAmCG7C1nHY0zyvVzcahaA5UQ.png",
+      "https://media.discordapp.net/attachments/1123424324422991992/1500972423024214179/bamboo.jpg?ex=69fa6100&is=69f90f80&hm=37caa33d63e2a8d9f872e3225dfea37da064b753655d8c8e01de2f7b9f1ba3a3&=&format=webp&width=2123&height=677",
     bitsyPrompt:
       "Yoo Tok Chang painted bamboo through all four seasons from a single leaf — the growth and decay held in one moment. Choose something in your life that cycles through change. Sketch it as if all its seasons exist at the same time.",
   },
