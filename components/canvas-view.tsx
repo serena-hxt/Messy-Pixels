@@ -7,11 +7,8 @@ import { Pencil, Type } from "lucide-react"
 type Mode = "draw" | "text"
 
 interface CanvasViewProps {
-  /** Contextual prompt shown above the canvas. */
   prompt?: string
-  /** Called when user closes; passes dataUrl if a drawing exists. */
   onClose: (saved?: { dataUrl: string; note?: string }) => void
-  /** Optional ref the parent can use to trigger the same save-and-close behaviour. */
   closeRef?: React.MutableRefObject<(() => void) | null>
 }
 
@@ -28,13 +25,28 @@ const COLORS = [
 
 const BRUSH_SIZES = [1.5, 3, 6, 10] as const
 
+// Re-apply context settings that are wiped when canvas dimensions change
+function applyCtxSettings(
+  ctx: CanvasRenderingContext2D,
+  dpr: number,
+  color: string,
+  brush: number,
+) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.scale(dpr, dpr)
+  ctx.lineCap = "round"
+  ctx.lineJoin = "round"
+  ctx.strokeStyle = color
+  ctx.lineWidth = brush
+}
+
 export function CanvasView({
   prompt = "Draw something that makes you feel calm",
   onClose,
   closeRef,
 }: CanvasViewProps) {
   const [mode, setMode] = useState<Mode>("draw")
-  const [color, setColor] = useState<string>("#e9c46a")
+  const [color, setColor] = useState<string>("#1a1a1f")
   const [brush, setBrush] = useState<number>(3)
   const [note, setNote] = useState<string>("")
   const [hasInk, setHasInk] = useState(false)
@@ -42,19 +54,26 @@ export function CanvasView({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawingRef = useRef(false)
   const lastPtRef = useRef<{ x: number; y: number } | null>(null)
+  // Keep color/brush in a ref so the pointer handlers always see current values
+  // without needing to be re-registered after every state change.
+  const colorRef = useRef(color)
+  const brushRef = useRef(brush)
+  useEffect(() => { colorRef.current = color }, [color])
+  useEffect(() => { brushRef.current = brush }, [brush])
 
   // ---- Setup canvas with HiDPI support + ResizeObserver ----
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
+    let pendingSetup: ReturnType<typeof requestAnimationFrame> | null = null
+
     const setup = () => {
       const rect = canvas.getBoundingClientRect()
-      // Skip until the flex layout has settled and the canvas has real dimensions
       if (rect.width === 0 || rect.height === 0) return
       const dpr = window.devicePixelRatio || 1
 
-      // Preserve existing strokes when resizing
+      // Preserve strokes
       const prev = document.createElement("canvas")
       prev.width = canvas.width
       prev.height = canvas.height
@@ -65,21 +84,35 @@ export function CanvasView({
 
       canvas.width = Math.floor(rect.width * dpr)
       canvas.height = Math.floor(rect.height * dpr)
+
       const ctx = canvas.getContext("2d")
       if (!ctx) return
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.scale(dpr, dpr)
-      ctx.lineCap = "round"
-      ctx.lineJoin = "round"
+      applyCtxSettings(ctx, dpr, colorRef.current, brushRef.current)
+
       if (prev.width > 0 && prev.height > 0) {
         ctx.drawImage(prev, 0, 0, rect.width, rect.height)
       }
     }
 
-    setup()
-    const ro = new ResizeObserver(() => setup())
+    // Defer the initial setup one frame to guarantee the flex layout has settled
+    pendingSetup = requestAnimationFrame(() => {
+      setup()
+      pendingSetup = null
+    })
+
+    const ro = new ResizeObserver(() => {
+      if (pendingSetup !== null) return
+      pendingSetup = requestAnimationFrame(() => {
+        setup()
+        pendingSetup = null
+      })
+    })
     ro.observe(canvas)
-    return () => ro.disconnect()
+
+    return () => {
+      if (pendingSetup !== null) cancelAnimationFrame(pendingSetup)
+      ro.disconnect()
+    }
   }, [])
 
   const getPoint = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -93,16 +126,32 @@ export function CanvasView({
     canvasRef.current?.setPointerCapture(e.pointerId)
     drawingRef.current = true
     lastPtRef.current = getPoint(e)
+
+    // Start a dot for single taps
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext("2d")
+    if (!ctx || !canvas) return
+    const dpr = window.devicePixelRatio || 1
+    applyCtxSettings(ctx, dpr, colorRef.current, brushRef.current)
+    const pt = lastPtRef.current
+    ctx.beginPath()
+    ctx.arc(pt.x, pt.y, brushRef.current / 2, 0, Math.PI * 2)
+    ctx.fillStyle = colorRef.current
+    ctx.fill()
+    if (!hasInk) setHasInk(true)
   }
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!drawingRef.current || mode !== "draw") return
-    const ctx = canvasRef.current?.getContext("2d")
-    if (!ctx) return
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext("2d")
+    if (!ctx || !canvas) return
+
+    const dpr = window.devicePixelRatio || 1
+    applyCtxSettings(ctx, dpr, colorRef.current, brushRef.current)
+
     const pt = getPoint(e)
     const last = lastPtRef.current ?? pt
-    ctx.strokeStyle = color
-    ctx.lineWidth = brush
     ctx.beginPath()
     ctx.moveTo(last.x, last.y)
     ctx.lineTo(pt.x, pt.y)
@@ -139,7 +188,6 @@ export function CanvasView({
     }
   }
 
-  // Expose the close behaviour so parent components (e.g. the back button) can trigger it.
   useEffect(() => {
     if (!closeRef) return
     closeRef.current = handleClose
@@ -155,7 +203,7 @@ export function CanvasView({
         <p className="font-mono text-[12px] font-light leading-relaxed text-foreground/75">{prompt}</p>
       </div>
 
-      {/* Drawing surface — fills available space, pure white card lifted above the aura */}
+      {/* Drawing surface */}
       <div className="min-h-0 flex-1 px-4 pb-3 pt-3 sm:px-8 md:px-12">
         <div
           className="relative h-full w-full overflow-hidden rounded-[28px]"
@@ -173,10 +221,7 @@ export function CanvasView({
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
             className="absolute inset-0 h-full w-full"
-            style={{
-              touchAction: "none",
-              cursor: mode === "draw" ? "crosshair" : "default",
-            }}
+            style={{ touchAction: "none", cursor: mode === "draw" ? "crosshair" : "default" }}
             aria-label="Drawing canvas"
           />
           {!hasInk && mode === "draw" && (
@@ -212,7 +257,7 @@ export function CanvasView({
   )
 }
 
-/* ---------------- Sub-components ---------------- */
+/* ---------------- DrawToolbar ---------------- */
 
 function DrawToolbar({
   color,
@@ -231,117 +276,159 @@ function DrawToolbar({
   onClear: () => void
   hasInk: boolean
 }) {
-  return (
-    <div
-      className="flex items-center gap-3 rounded-[28px] px-3 py-3"
-      style={{
-        backgroundColor: "#f0f2f5",
-        boxShadow:
-          "inset 6px 6px 12px #d1d9e6, inset -6px -6px 12px #ffffff, 0 12px 30px -12px rgba(60,70,90,0.1)",
-      }}
-    >
-      <button
-        type="button"
-        onClick={onSwitchToText}
-        aria-label="Switch to text input"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-        style={{
-          background: "linear-gradient(145deg, #ffffff, #eef0f4)",
-          boxShadow: "4px 4px 10px rgba(209,217,230,0.9), -4px -4px 10px rgba(255,255,255,0.95)",
-        }}
-      >
-        <Type className="h-4 w-4 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
-      </button>
+  const [panel, setPanel] = useState<"none" | "size" | "color">("none")
 
-      <div
-        className="flex flex-1 items-center gap-2 overflow-x-auto rounded-full px-3 py-2"
-        style={{
-          background: "linear-gradient(145deg, #eef0f4, #ffffff)",
-          boxShadow: "inset 4px 4px 8px rgba(209,217,230,0.9), inset -4px -4px 8px rgba(255,255,255,0.95)",
-          scrollbarWidth: "none",
-        }}
-      >
-        <div className="flex shrink-0 items-center gap-1.5 pr-2" aria-label="Brush size">
+  const togglePanel = (target: "size" | "color") =>
+    setPanel((prev) => (prev === target ? "none" : target))
+
+  const neu = {
+    background: "linear-gradient(145deg, #ffffff, #eef0f4)",
+    boxShadow: "4px 4px 10px rgba(209,217,230,0.9), -4px -4px 10px rgba(255,255,255,0.95)",
+  }
+
+  const panelStyle: React.CSSProperties = {
+    backgroundColor: "#f0f2f5",
+    boxShadow:
+      "inset 3px 3px 7px #d1d9e6, inset -3px -3px 7px #ffffff, 0 8px 20px -10px rgba(60,70,90,0.18)",
+    borderRadius: "20px",
+    padding: "10px 14px",
+    marginBottom: "8px",
+  }
+
+  return (
+    <div className="flex flex-col">
+      {/* Floating panels — appear above the toolbar */}
+      {panel === "size" && (
+        <div style={panelStyle} className="flex items-center gap-3">
           {BRUSH_SIZES.map((b) => {
             const active = brush === b
             return (
               <button
                 key={b}
                 type="button"
-                onClick={() => onBrushChange(b)}
+                onClick={() => { onBrushChange(b); setPanel("none") }}
                 aria-label={`Brush size ${b}`}
                 aria-pressed={active}
-                className="flex h-6 w-6 items-center justify-center rounded-full transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-full transition-all"
                 style={{
-                  border: active ? "0.75px solid rgba(26,26,31,0.55)" : "0.5px solid rgba(26,26,31,0.12)",
-                  backgroundColor: active ? "rgba(26,26,31,0.04)" : "transparent",
+                  ...neu,
+                  border: active ? "1.5px solid rgba(26,26,31,0.5)" : "none",
+                  transform: active ? "scale(1.05)" : "scale(1)",
                 }}
               >
                 <span
                   className="block rounded-full bg-foreground"
-                  style={{ width: Math.max(2, b), height: Math.max(2, b) }}
+                  style={{ width: Math.max(2, b * 1.4), height: Math.max(2, b * 1.4) }}
                 />
               </button>
             )
           })}
         </div>
+      )}
 
-        <span className="h-5 w-px shrink-0 bg-foreground/10" aria-hidden="true" />
-
-        <div className="flex shrink-0 items-center gap-1.5" aria-label="Color">
+      {panel === "color" && (
+        <div style={panelStyle} className="grid grid-cols-4 gap-2.5">
           {COLORS.map((c) => {
             const active = color === c
             return (
               <button
                 key={c}
                 type="button"
-                onClick={() => onColorChange(c)}
+                onClick={() => { onColorChange(c); setPanel("none") }}
                 aria-label={`Color ${c}`}
                 aria-pressed={active}
-                className="h-6 w-6 rounded-full transition-transform"
+                className="h-9 w-9 rounded-full transition-transform"
                 style={{
                   backgroundColor: c,
-                  border: active ? "1.5px solid rgba(26,26,31,0.7)" : "0.5px solid rgba(26,26,31,0.18)",
-                  transform: active ? "scale(1.08)" : "scale(1)",
-                  boxShadow: active ? "0 2px 6px -2px rgba(0,0,0,0.25)" : undefined,
+                  border: active ? "2px solid rgba(26,26,31,0.7)" : "1px solid rgba(26,26,31,0.12)",
+                  transform: active ? "scale(1.1)" : "scale(1)",
+                  boxShadow: active ? "0 3px 8px -2px rgba(0,0,0,0.3)" : undefined,
                 }}
               />
             )
           })}
         </div>
-      </div>
+      )}
 
-      {hasInk ? (
+      {/* Main toolbar row */}
+      <div
+        className="flex items-center gap-3 rounded-[28px] px-3 py-3"
+        style={{
+          backgroundColor: "#f0f2f5",
+          boxShadow:
+            "inset 6px 6px 12px #d1d9e6, inset -6px -6px 12px #ffffff, 0 12px 30px -12px rgba(60,70,90,0.1)",
+        }}
+      >
+        {/* Text mode toggle */}
         <button
           type="button"
-          onClick={onClear}
-          aria-label="Clear canvas"
-          className="flex h-11 shrink-0 items-center justify-center rounded-full px-3 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/65"
+          onClick={onSwitchToText}
+          aria-label="Switch to text input"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+          style={neu}
+        >
+          <Type className="h-4 w-4 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
+        </button>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Active brush size indicator — click to open size picker */}
+        <button
+          type="button"
+          onClick={() => togglePanel("size")}
+          aria-label="Change brush size"
+          aria-expanded={panel === "size"}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
           style={{
-            background: "linear-gradient(145deg, #ffffff, #eef0f4)",
-            boxShadow: "4px 4px 10px rgba(209,217,230,0.9), -4px -4px 10px rgba(255,255,255,0.95)",
+            ...neu,
+            border: panel === "size" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
           }}
         >
-          clear
+          <span
+            className="block rounded-full bg-foreground"
+            style={{ width: Math.max(3, brush * 1.4), height: Math.max(3, brush * 1.4) }}
+          />
         </button>
-      ) : (
-        <div
-          aria-label={`Active color ${color}`}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+
+        {/* Active color swatch — click to open color picker */}
+        <button
+          type="button"
+          onClick={() => togglePanel("color")}
+          aria-label="Change color"
+          aria-expanded={panel === "color"}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
           style={{
-            background: "linear-gradient(145deg, #ffffff, #eef0f4)",
-            boxShadow: "4px 4px 10px rgba(209,217,230,0.9), -4px -4px 10px rgba(255,255,255,0.95)",
+            ...neu,
+            border: panel === "color" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
           }}
         >
           <span
             className="block h-6 w-6 rounded-full"
             style={{ backgroundColor: color, border: "0.5px solid rgba(26,26,31,0.18)" }}
           />
-        </div>
-      )}
+        </button>
+
+        {/* Clear / empty-state indicator */}
+        {hasInk ? (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="Clear canvas"
+            className="flex h-11 shrink-0 items-center justify-center rounded-full px-3 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/65"
+            style={neu}
+          >
+            clear
+          </button>
+        ) : (
+          <div style={{ width: 0 }} />
+        )}
+      </div>
     </div>
   )
 }
+
+/* ---------------- TextToolbar ---------------- */
 
 function TextToolbar({
   note,
@@ -356,10 +443,7 @@ function TextToolbar({
 }) {
   return (
     <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSubmit()
-      }}
+      onSubmit={(e) => { e.preventDefault(); onSubmit() }}
       className="flex items-center gap-3 rounded-[28px] px-3 py-3"
       style={{
         backgroundColor: "#f0f2f5",
