@@ -45,12 +45,14 @@ async function fetchArtworkByTitle(title: string, artist?: string): Promise<Artw
 interface ArtworkCardProps {
   title: string
   artist?: string
-  /** Called with the resolved Artwork when the card is tapped. */
+  /** Called with the resolved Artwork when the card body is tapped (opens detail modal). */
   onSelect: (artwork: Artwork) => void
+  /** Called when the "edit on artwork" button is tapped — jumps to the canvas with this work as a reference layer. */
+  onEditOnArtwork?: (artwork: Artwork) => void
 }
 
 /** Compact card that resolves a HAM artwork by title and lets the user expand it. */
-export function ArtworkCard({ title, artist, onSelect }: ArtworkCardProps) {
+export function ArtworkCard({ title, artist, onSelect, onEditOnArtwork }: ArtworkCardProps) {
   const [artwork, setArtwork] = useState<Artwork | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading")
 
@@ -100,54 +102,85 @@ export function ArtworkCard({ title, artist, onSelect }: ArtworkCardProps) {
   const snippet = makeSnippet(artwork.commentary, 110)
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(artwork)}
-      className="group flex max-w-[88%] items-stretch gap-3 self-start rounded-[20px] rounded-bl-[6px] bg-background/75 p-2.5 text-left backdrop-blur-xl transition-colors hover:bg-background/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    <div
+      className="flex max-w-[88%] flex-col gap-1.5 self-start"
       style={{
-        border: "0.75px solid rgba(26,26,31,0.16)",
-        boxShadow: "0 10px 24px -16px rgba(60, 70, 90, 0.22)",
         opacity: 0,
         transform: "translateY(8px)",
         animation: "meta-rise 480ms ease-out 80ms both",
       }}
-      aria-label={`Open details for ${artwork.title} by ${artwork.artist}`}
     >
-      {/* Thumbnail */}
-      <div
-        className="relative h-[68px] w-[68px] shrink-0 overflow-hidden rounded-[12px] bg-foreground/5"
-        style={{ border: "0.5px solid rgba(26,26,31,0.1)" }}
+      {/* Card body — clicking opens the detail modal. */}
+      <button
+        type="button"
+        onClick={() => onSelect(artwork)}
+        className="group flex items-stretch gap-3 rounded-[20px] rounded-bl-[6px] bg-background/75 p-2.5 text-left backdrop-blur-xl transition-colors hover:bg-background/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={{
+          border: "0.75px solid rgba(26,26,31,0.16)",
+          boxShadow: "0 10px 24px -16px rgba(60, 70, 90, 0.22)",
+        }}
+        aria-label={`Open details for ${artwork.title} by ${artwork.artist}`}
       >
-        {artwork.primaryimageurl ? (
-          <Image
-            src={artwork.primaryimageurl || "/placeholder.svg"}
-            alt=""
-            fill
-            sizes="68px"
-            className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-            unoptimized
-          />
-        ) : null}
-      </div>
+        {/* Thumbnail */}
+        <div
+          className="relative h-[68px] w-[68px] shrink-0 overflow-hidden rounded-[12px] bg-foreground/5"
+          style={{ border: "0.5px solid rgba(26,26,31,0.1)" }}
+        >
+          {artwork.primaryimageurl ? (
+            <Image
+              src={artwork.primaryimageurl || "/placeholder.svg"}
+              alt=""
+              fill
+              sizes="68px"
+              className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+              unoptimized
+            />
+          ) : null}
+        </div>
 
-      {/* Body */}
-      <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-0.5 pr-1">
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45">
-          harvard art museums
-        </p>
-        <p className="truncate font-mono text-[13.5px] font-normal leading-snug text-foreground">
-          {artwork.title}
-        </p>
-        <p className="truncate font-mono text-[11px] font-light text-foreground/60">
-          {artwork.artist}
-        </p>
-        {snippet ? (
-          <p className="mt-1 line-clamp-2 font-mono text-[11.5px] font-light leading-relaxed text-foreground/70">
-            {snippet}
+        {/* Body */}
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-0.5 pr-1">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45">
+            harvard art museums
           </p>
-        ) : null}
-      </div>
-    </button>
+          <p className="truncate font-mono text-[13.5px] font-normal leading-snug text-foreground">
+            {artwork.title}
+          </p>
+          <p className="truncate font-mono text-[11px] font-light text-foreground/60">
+            {artwork.artist}
+          </p>
+          {snippet ? (
+            <p className="mt-1 line-clamp-2 font-mono text-[11.5px] font-light leading-relaxed text-foreground/70">
+              {snippet}
+            </p>
+          ) : null}
+        </div>
+      </button>
+
+      {/* "Edit on artwork" affordance — opens the canvas with this piece as a reference layer. */}
+      {onEditOnArtwork && (
+        <button
+          type="button"
+          onClick={() => onEditOnArtwork(artwork)}
+          className="group ml-1 inline-flex items-center gap-2 self-start rounded-full bg-background/70 px-3.5 py-1.5 backdrop-blur-md transition-colors hover:bg-background/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          style={{
+            border: "0.75px solid rgba(26,26,31,0.18)",
+            boxShadow: "0 6px 16px -12px rgba(60, 70, 90, 0.22)",
+          }}
+          aria-label={`Edit on ${artwork.title}`}
+        >
+          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/70 group-hover:text-foreground">
+            edit on artwork
+          </span>
+          <span
+            aria-hidden="true"
+            className="font-mono text-[12px] text-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground/70"
+          >
+            →
+          </span>
+        </button>
+      )}
+    </div>
   )
 }
 

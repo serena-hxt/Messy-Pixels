@@ -99,13 +99,25 @@ interface ChatThreadProps {
   drawings?: SavedDrawing[]
   error?: Error | null
   onAsk?: (question: string) => void
+  /**
+   * Called when the user taps "edit on artwork" inside an ArtworkCard.
+   * Lets the host page jump to the canvas with this artwork as the reference layer.
+   */
+  onEditOnArtwork?: (artwork: Artwork) => void
 }
 
 type Item =
   | { kind: "msg"; key: string; t: number; node: UIMessage }
   | { kind: "drawing"; key: string; t: number; node: SavedDrawing }
 
-export function ChatThread({ messages, status, drawings = [], error, onAsk }: ChatThreadProps) {
+export function ChatThread({
+  messages,
+  status,
+  drawings = [],
+  error,
+  onAsk,
+  onEditOnArtwork,
+}: ChatThreadProps) {
   const endRef = useRef<HTMLDivElement>(null)
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([])
   const [detailArtwork, setDetailArtwork] = useState<Artwork | null>(null)
@@ -284,6 +296,7 @@ export function ChatThread({ messages, status, drawings = [], error, onAsk }: Ch
                         title={ref.title}
                         artist={ref.artist}
                         onSelect={handleArtworkSelect}
+                        onEditOnArtwork={onEditOnArtwork}
                       />
                     ))}
                   </div>

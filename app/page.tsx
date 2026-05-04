@@ -16,6 +16,7 @@ import { ProfileView } from "@/components/profile-view"
 import { HistoryView } from "@/components/history-view"
 import { GalleryView } from "@/components/gallery-view"
 import { deriveSessionTitle, upsertSession, type ChatSession } from "@/lib/storage"
+import { useSelectedArtwork, type Artwork } from "@/contexts/selected-artwork-context"
 
 export interface SavedDrawing {
   id: string
@@ -28,9 +29,11 @@ export default function HomePage() {
   const [input, setInput] = useState("")
   const [lensOpen, setLensOpen] = useState(false)
   const [canvasOpen, setCanvasOpen] = useState(false)
+  const [canvasStartWithReference, setCanvasStartWithReference] = useState(false)
   const [drawings, setDrawings] = useState<SavedDrawing[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState<MenuDestination | null>(null)
+  const { setSelectedArtwork } = useSelectedArtwork()
   const lastTriggeredMessageIdRef = useRef<string | null>(null)
   const canvasCloseRef = useRef<(() => void) | null>(null)
   const sessionIdRef = useRef<string | null>(null)
@@ -96,8 +99,19 @@ export default function HomePage() {
     ? "How would you re-interpret these leaves?"
     : "Draw something that makes you feel calm"
 
+  // When the user taps "edit on artwork" under a chat ArtworkCard, set the
+  // artwork in the global context and open the canvas with the reference
+  // overlay enabled. The canvas reads `selectedArtwork` from context, so we
+  // just need the flag + open state here.
+  const handleEditOnArtwork = (artwork: Artwork) => {
+    setSelectedArtwork(artwork)
+    setCanvasStartWithReference(true)
+    setCanvasOpen(true)
+  }
+
   const handleCanvasClose = (saved?: { dataUrl: string; note?: string }) => {
     setCanvasOpen(false)
+    setCanvasStartWithReference(false)
     if (!saved) return
     const drawing: SavedDrawing = {
       id: `dwg_${Date.now()}`,
@@ -126,7 +140,12 @@ export default function HomePage() {
         {canvasOpen ? (
           <>
             <ChatSnippet messages={messages} />
-            <CanvasView prompt={canvasPrompt} onClose={handleCanvasClose} closeRef={canvasCloseRef} />
+            <CanvasView
+              prompt={canvasPrompt}
+              onClose={handleCanvasClose}
+              closeRef={canvasCloseRef}
+              startWithReference={canvasStartWithReference}
+            />
           </>
         ) : (
           <>
@@ -137,6 +156,7 @@ export default function HomePage() {
                 drawings={drawings}
                 error={error}
                 onAsk={(question) => sendMessage({ text: question })}
+                onEditOnArtwork={handleEditOnArtwork}
               />
             ) : (
               <BitsyCard onAsk={(question) => sendMessage({ text: question })} />
