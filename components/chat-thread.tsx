@@ -19,18 +19,19 @@ interface ChatThreadProps {
   messages: UIMessage[]
   status: "submitted" | "streaming" | "ready" | "error"
   drawings?: SavedDrawing[]
+  error?: Error | null
 }
 
 type Item =
   | { kind: "msg"; key: string; t: number; node: UIMessage }
   | { kind: "drawing"; key: string; t: number; node: SavedDrawing }
 
-export function ChatThread({ messages, status, drawings = [] }: ChatThreadProps) {
+export function ChatThread({ messages, status, drawings = [], error }: ChatThreadProps) {
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-  }, [messages, status, drawings])
+  }, [messages, status, drawings, error])
 
   const isWaiting = status === "submitted"
 
@@ -131,6 +132,26 @@ export function ChatThread({ messages, status, drawings = [] }: ChatThreadProps)
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-foreground/50 [animation-delay:150ms]" />
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-foreground/50 [animation-delay:300ms]" />
               </div>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex justify-start">
+            <div
+              className="max-w-[88%] rounded-[20px] rounded-bl-[6px] px-4 py-2.5 font-mono text-[13px] font-light leading-relaxed backdrop-blur-xl"
+              style={{
+                backgroundColor: "rgba(212, 165, 165, 0.18)",
+                border: "0.75px solid rgba(180, 100, 100, 0.35)",
+                color: "rgba(120, 60, 60, 0.95)",
+                boxShadow: "0 8px 20px -14px rgba(60, 70, 90, 0.18)",
+              }}
+              role="alert"
+            >
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.22em] opacity-70">
+                connection
+              </p>
+              <p className="whitespace-pre-wrap text-pretty">{error.message || "Something went wrong reaching Bitsy. Please try again."}</p>
             </div>
           </div>
         )}

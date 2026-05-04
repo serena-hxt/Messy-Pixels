@@ -23,32 +23,31 @@ Tone: gentle, observant, a little playful. Avoid emojis. Avoid markdown headers.
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json()
 
-  try {
-    const result = streamText({
-      // Using gemini-1.5-flash for better rate limits on the free tier
-      model: google("gemini-1.5-flash"),
-      system: SYSTEM_PROMPT,
-      messages: await convertToModelMessages(messages),
-    })
+  const result = streamText({
+    // gemini-2.5-flash is the current free-tier model (May 2026).
+    // Older names like gemini-1.5-flash 404 on the v1beta endpoint.
+    model: google("gemini-2.5-flash"),
+    system: SYSTEM_PROMPT,
+    messages: await convertToModelMessages(messages),
+  })
 
-    return result.toUIMessageStreamResponse()
-  } catch (error) {
-    console.error("[v0] Chat API error:", error)
-    
-    // Check if it's a rate limit error
-    const errorMessage = error instanceof Error ? error.message : "Unknown error"
-    if (errorMessage.includes("quota") || errorMessage.includes("429")) {
-      return new Response(
-        JSON.stringify({
-          error: "Rate limit exceeded. Please wait a moment and try again.",
-        }),
-        { status: 429, headers: { "Content-Type": "application/json" } }
-      )
-    }
+  // Surface streaming errors back through the UI stream so the user sees
+  // a real message instead of an empty assistant bubble.
+  return result.toUIMessageStreamResponse({
+    onError: (error) => {
+      console.error("[v0] Chat stream error:", error)
+      const message = error instanceof Error ? error.message : String(error)
 
-    return new Response(
-      JSON.stringify({ error: "Something went wrong. Please try again." }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    )
-  }
+      if (message.includes("quota") || message.includes("RESOURCE_EXHAUSTED") || message.includes("429")) {
+        return "I've hit my Gemini rate limit for the moment. Please try again in about a minute."
+      }
+      if (message.includes("API key") || message.includes("401") || message.includes("403")) {
+        return "My Gemini API key isn't valid right now. Please check the GOOGLE_GENERATIVE_AI_API_KEY environment variable."
+      }
+      if (message.includes("not found") || message.includes("404")) {
+        return "The Gemini model isn't available. The chat route may need an updated model name."
+      }
+      return "Something went wrong reaching Gemini. Please try again."
+    },
+  })
 }

@@ -36,7 +36,7 @@ export default function HomePage() {
   const sessionIdRef = useRef<string | null>(null)
   const sessionStartedRef = useRef<number | null>(null)
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
   })
 
@@ -131,7 +131,7 @@ export default function HomePage() {
         ) : (
           <>
             {hasConversation ? (
-              <ChatThread messages={messages} status={status} drawings={drawings} />
+              <ChatThread messages={messages} status={status} drawings={drawings} error={error} />
             ) : (
               <BitsyCard />
             )}
