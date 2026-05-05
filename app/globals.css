@@ -328,6 +328,18 @@
     animation: ripple-fade 850ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
+  /* Typewriter caret blink for streamed default-answer text */
+  @keyframes caret-blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    51%,
+    100% {
+      opacity: 0;
+    }
+  }
+
   /* Menu drawer slide */
   @keyframes drawer-enter {
     from {

@@ -90,6 +90,77 @@ function renderRichText(text: string): React.ReactNode[] {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Streaming text — typewriter effect for synthetic (default-answer) messages */
+/* -------------------------------------------------------------------------- */
+
+interface StreamingTextProps {
+  text: string
+  /** Approximate characters per second to reveal. */
+  charsPerTick?: number
+  /** Tick interval in ms. */
+  tickMs?: number
+  /** Called whenever a new chunk is rendered (for scroll syncing). */
+  onTick?: () => void
+  /** Called once when streaming completes. */
+  onDone?: () => void
+}
+
+function StreamingText({
+  text,
+  charsPerTick = 3,
+  tickMs = 18,
+  onTick,
+  onDone,
+}: StreamingTextProps) {
+  const [shown, setShown] = useState(0)
+  const doneRef = useRef(false)
+
+  useEffect(() => {
+    // Reset when target text changes.
+    setShown(0)
+    doneRef.current = false
+  }, [text])
+
+  useEffect(() => {
+    if (doneRef.current) return
+    if (shown >= text.length) {
+      if (!doneRef.current) {
+        doneRef.current = true
+        onDone?.()
+      }
+      return
+    }
+    const id = window.setTimeout(() => {
+      setShown((s) => Math.min(text.length, s + charsPerTick))
+      onTick?.()
+    }, tickMs)
+    return () => window.clearTimeout(id)
+  }, [shown, text, charsPerTick, tickMs, onTick, onDone])
+
+  const visibleText = text.slice(0, shown)
+  const isStreaming = shown < text.length
+
+  return (
+    <>
+      {renderRichText(visibleText)}
+      {isStreaming && (
+        <span
+          aria-hidden="true"
+          className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] bg-foreground/60 align-middle"
+          style={{ animation: "caret-blink 900ms steps(2, end) infinite" }}
+        />
+      )}
+    </>
+  )
+}
+
+/** Heuristic: synthetic assistant messages from the default-answer registry
+ *  use IDs starting with `synth_assistant_`. */
+function isSyntheticAssistantId(id: string): boolean {
+  return id.startsWith("synth_assistant_")
+}
+
+/* -------------------------------------------------------------------------- */
 /* Component                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -121,15 +192,49 @@ export function ChatThread({
   onAsk,
   onEditOnArtwork,
 }: ChatThreadProps) {
+  const scrollRef = useRef<HTMLElement | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  const userScrolledUpRef = useRef(false)
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([])
   const [detailArtwork, setDetailArtwork] = useState<Artwork | null>(null)
+  const [completedSynthetic, setCompletedSynthetic] = useState<Set<string>>(() => new Set())
 
   const { setSelectedArtwork, selectedArtwork } = useSelectedArtwork()
 
+  // Detect when the user manually scrolls up so we don't override their position.
   useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      // Treat anything >120px from bottom as "user has scrolled up".
+      userScrolledUpRef.current = distanceFromBottom > 120
+    }
+    el.addEventListener("scroll", onScroll, { passive: true })
+    return () => el.removeEventListener("scroll", onScroll)
+  }, [])
+
+  // Auto-scroll to bottom only when the user is already near the bottom.
+  // This prevents the view from yanking back while the reader is scrolling up.
+  useEffect(() => {
+    if (userScrolledUpRef.current) return
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
   }, [messages, status, drawings, error, suggestedQuestions])
+
+  // Stable callback for StreamingText to nudge scroll while typing.
+  const handleStreamTick = () => {
+    if (userScrolledUpRef.current) return
+    endRef.current?.scrollIntoView({ behavior: "auto", block: "end" })
+  }
+
+  const handleStreamDone = (messageId: string) => {
+    setCompletedSynthetic((prev) => {
+      if (prev.has(messageId)) return prev
+      const next = new Set(prev)
+      next.add(messageId)
+      return next
+    })
+  }
 
   const isWaiting = status === "submitted"
 
@@ -150,6 +255,12 @@ export function ChatThread({
   // Generate contextual follow-up questions for the latest assistant message.
   useEffect(() => {
     if (status !== "ready" || !onAsk) return
+    // If pre-defined followUpQuestions exist (from default-answer registry),
+    // skip the API call entirely — they take precedence in render.
+    if (followUpQuestions && followUpQuestions.length > 0) {
+      setSuggestedQuestions([])
+      return
+    }
     const lastMsg = messages[messages.length - 1]
     if (!lastMsg || lastMsg.role !== "assistant") {
       setSuggestedQuestions([])
@@ -177,7 +288,7 @@ export function ChatThread({
     return () => {
       cancelled = true
     }
-  }, [messages, status, onAsk])
+  }, [messages, status, onAsk, followUpQuestions])
 
   // When an artwork card is tapped, store it globally and open the modal.
   const handleArtworkSelect = (artwork: Artwork) => {
@@ -198,7 +309,9 @@ export function ChatThread({
   return (
     <>
       <section
+        ref={scrollRef}
         className="flex flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-8 md:px-12"
+        style={{ overscrollBehavior: "contain", touchAction: "pan-y" }}
         aria-live="polite"
         aria-label="Conversation with Bitsy"
       >
@@ -278,11 +391,15 @@ export function ChatThread({
             // Skip empty bubbles, but keep the row if there are artwork cards to show.
             if (!parsed.visible && parsed.artworks.length === 0) return null
 
+            const isSynthetic = !isUser && isSyntheticAssistantId(m.id)
+            const isStreaming = isSynthetic && !completedSynthetic.has(m.id)
+
             const isLatestAssistant =
               !isUser &&
               m.id === lastAssistantId &&
               status === "ready" &&
-              suggestedQuestions.length > 0
+              !isStreaming &&
+              ((followUpQuestions && followUpQuestions.length > 0) || suggestedQuestions.length > 0)
 
             return (
               <div key={item.key} className="flex flex-col gap-2">
@@ -310,7 +427,17 @@ export function ChatThread({
                         </p>
                       )}
                       <p className="whitespace-pre-wrap text-pretty">
-                        {isUser ? parsed.visible : renderRichText(parsed.visible)}
+                        {isUser ? (
+                          parsed.visible
+                        ) : isSynthetic ? (
+                          <StreamingText
+                            text={parsed.visible}
+                            onTick={handleStreamTick}
+                            onDone={() => handleStreamDone(m.id)}
+                          />
+                        ) : (
+                          renderRichText(parsed.visible)
+                        )}
                       </p>
                     </div>
                   </div>
