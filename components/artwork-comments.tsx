@@ -10,23 +10,53 @@ interface Comment {
   created_at: string
 }
 
+interface DanmakuItem {
+  id: string
+  content: string
+  lane: number      // 0-based vertical lane index
+  duration: number  // seconds to cross the screen
+  delay: number     // seconds before starting
+  fontSize: number  // slight size variation for depth
+  opacity: number   // slight opacity variation
+}
+
 interface ArtworkCommentsProps {
   artworkId: number
 }
 
+const LANE_COUNT = 7       // vertical slots across the overlay
+const MAX_ACTIVE = 18      // max items flying at once
+
+function buildDanmakuQueue(comments: Comment[]): DanmakuItem[] {
+  // Shuffle so every reload feels fresh
+  const shuffled = [...comments].sort(() => Math.random() - 0.5)
+  return shuffled.map((c, i) => ({
+    id: c.id,
+    content: c.content,
+    lane: i % LANE_COUNT,
+    duration: 9 + Math.random() * 7,          // 9 – 16 s
+    delay: (i / MAX_ACTIVE) * 12 * Math.random(), // stagger start times
+    fontSize: 11 + Math.floor(Math.random() * 3), // 11–13 px
+    opacity: 0.55 + Math.random() * 0.35,     // 0.55 – 0.9
+  }))
+}
+
 export function ArtworkComments({ artworkId }: ArtworkCommentsProps) {
   const [comments, setComments] = useState<Comment[]>([])
+  const [danmakuItems, setDanmakuItems] = useState<DanmakuItem[]>([])
   const [loading, setLoading] = useState(true)
   const [posting, setPosting] = useState(false)
   const [content, setContent] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
 
   const fetchComments = useCallback(async () => {
     try {
       const res = await fetch(`/api/comments?artworkId=${artworkId}`)
       const data = await res.json()
-      if (data.comments) setComments(data.comments)
+      if (data.comments) {
+        setComments(data.comments)
+        setDanmakuItems(buildDanmakuQueue(data.comments))
+      }
     } catch {
       // silently ignore
     } finally {
@@ -37,6 +67,20 @@ export function ArtworkComments({ artworkId }: ArtworkCommentsProps) {
   useEffect(() => {
     fetchComments()
   }, [fetchComments])
+
+  // When a new comment is posted, inject it immediately into a random lane
+  const injectDanmaku = (comment: Comment) => {
+    const item: DanmakuItem = {
+      id: `live-${comment.id}`,
+      content: comment.content,
+      lane: Math.floor(Math.random() * LANE_COUNT),
+      duration: 10 + Math.random() * 4,
+      delay: 0,
+      fontSize: 13,
+      opacity: 1,
+    }
+    setDanmakuItems((prev) => [...prev, item])
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -50,6 +94,7 @@ export function ArtworkComments({ artworkId }: ArtworkCommentsProps) {
       created_at: new Date().toISOString(),
     }
     setComments((prev) => [optimistic, ...prev])
+    injectDanmaku(optimistic)
     setContent("")
 
     try {
@@ -64,88 +109,80 @@ export function ArtworkComments({ artworkId }: ArtworkCommentsProps) {
       })
       const data = await res.json()
       if (data.comment) {
-        // Replace optimistic entry with the real one
         setComments((prev) =>
           prev.map((c) => (c.id === optimistic.id ? data.comment : c))
         )
       }
     } catch {
-      // keep optimistic entry — network error, don't remove it
+      // keep optimistic entry
     } finally {
       setPosting(false)
     }
   }
 
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const diff = Date.now() - date.getTime()
-    const mins = Math.floor(diff / 60000)
-    const hours = Math.floor(diff / 3600000)
-    const days = Math.floor(diff / 86400000)
-    if (mins < 1) return "just now"
-    if (mins < 60) return `${mins}m`
-    if (hours < 24) return `${hours}h`
-    if (days < 7) return `${days}d`
-    return date.toLocaleDateString()
-  }
+  // Percentage height per lane
+  const laneHeight = 100 / LANE_COUNT
 
   return (
-    <div
-      className="flex flex-col overflow-hidden rounded-2xl border border-white/15 bg-black/45 backdrop-blur-2xl"
-      style={{ boxShadow: "0 12px 32px -12px rgba(0,0,0,0.5)" }}
-    >
-      {/* Scrollable comments list */}
+    <div className="relative flex flex-col" style={{ height: "100%", minHeight: 0 }}>
+      {/* Danmaku floating layer — fills the overlay area, pointer-events off */}
       <div
-        ref={listRef}
-        className="flex max-h-[160px] flex-col-reverse gap-1.5 overflow-y-auto px-3 pt-2 pb-1"
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+        aria-hidden="true"
       >
-        {loading && (
-          <p className="py-3 text-center font-mono text-[10px] text-white/35">loading…</p>
-        )}
-        {!loading && comments.length === 0 && (
-          <p className="py-3 text-center font-mono text-[10px] text-white/35">
-            be the first to leave a thought
-          </p>
-        )}
-        {comments.map((comment) => (
-          <div key={comment.id} className="flex items-start gap-2 py-0.5">
-            <span className="font-mono text-[11px] font-semibold leading-snug text-white/55 shrink-0">
-              Anon
-            </span>
-            <span className="flex-1 font-mono text-[11.5px] leading-snug text-white/85 break-words">
-              {comment.content}
-            </span>
-            <span className="shrink-0 font-mono text-[9.5px] text-white/30 pt-0.5">
-              {formatTime(comment.created_at)}
-            </span>
-          </div>
+        {!loading && danmakuItems.map((item) => (
+          <span
+            key={item.id}
+            className="absolute whitespace-nowrap font-mono"
+            style={{
+              top: `${item.lane * laneHeight + laneHeight * 0.2}%`,
+              left: "100%",
+              fontSize: `${item.fontSize}px`,
+              color: `rgba(255,255,255,${item.opacity})`,
+              textShadow: "0 1px 6px rgba(0,0,0,0.7)",
+              animation: `danmaku-fly ${item.duration}s ${item.delay}s linear infinite`,
+            }}
+          >
+            {item.content}
+          </span>
         ))}
+        {!loading && comments.length === 0 && (
+          <span
+            className="absolute font-mono text-[11px] text-white/35"
+            style={{ top: "45%", left: "50%", transform: "translateX(-50%)" }}
+          >
+            be the first to leave a thought
+          </span>
+        )}
       </div>
 
-      {/* Divider */}
-      <div className="mx-3 border-t border-white/10" />
-
-      {/* Always-visible input — no toggle required */}
-      <form onSubmit={handleSubmit} className="flex items-center gap-2 px-3 py-2">
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder="leave a thought…"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          maxLength={300}
-          className="min-w-0 flex-1 bg-transparent font-mono text-[12px] text-white placeholder:text-white/30 focus:outline-none"
-          aria-label="Comment"
-        />
-        <button
-          type="submit"
-          disabled={!content.trim() || posting}
-          aria-label="Post comment"
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/70 transition-colors hover:bg-white/20 disabled:opacity-30"
+      {/* Input bar — pinned to bottom, always on top */}
+      <div className="relative z-10 mt-auto">
+        <form
+          onSubmit={handleSubmit}
+          className="flex items-center gap-2 rounded-xl border border-white/15 bg-black/45 px-3 py-2 backdrop-blur-2xl"
+          style={{ boxShadow: "0 8px 24px -8px rgba(0,0,0,0.5)" }}
         >
-          <Send className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
-        </button>
-      </form>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="leave a thought…"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            maxLength={300}
+            className="min-w-0 flex-1 bg-transparent font-mono text-[12px] text-white placeholder:text-white/30 focus:outline-none"
+            aria-label="Comment"
+          />
+          <button
+            type="submit"
+            disabled={!content.trim() || posting}
+            aria-label="Post comment"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/70 transition-colors hover:bg-white/20 disabled:opacity-30"
+          >
+            <Send className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

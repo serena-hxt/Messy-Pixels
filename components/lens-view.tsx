@@ -414,8 +414,8 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
               </button>
             </div>
 
-            {/* Comments — always visible below the top bar, no toggle */}
-            <div className="absolute inset-x-5 top-[72px] z-10">
+            {/* Comments — danmaku layer fills the space between top bar and bottom panel */}
+            <div className="absolute inset-x-0 top-[64px] bottom-[230px] z-10 overflow-hidden px-5 flex flex-col">
               <ArtworkComments artworkId={digitalTwin.id} />
             </div>
 

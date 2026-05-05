@@ -215,7 +215,7 @@
     animation: meta-rise 480ms ease-out forwards;
   }
 
-  /* Danmaku floating comments */
+  /* Danmaku floating comments — classic version used by lens danmaku layer */
   @keyframes danmaku-slide {
     from {
       transform: translateX(110vw);
@@ -229,6 +229,16 @@
     animation-timing-function: linear;
     animation-fill-mode: forwards;
     will-change: transform;
+  }
+
+  /* Danmaku-fly: starts from left:100% (right edge) and scrolls left off-screen */
+  @keyframes danmaku-fly {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-100vw - 200%));
+    }
   }
 
   /* Lens enter/exit blur transitions */
