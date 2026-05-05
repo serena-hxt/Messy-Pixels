@@ -533,6 +533,14 @@ export function ChatThread({
             </div>
           )}
 
+          {/* Bottom spacer — ensures the latest message always clears the
+              sticky InteractionBar with comfortable breathing room. The
+              endRef sits AFTER this spacer so scrollIntoView({block:"end"})
+              snaps the spacer (not the bubble) flush to the viewport's
+              bottom edge, leaving the last bubble fully visible above
+              the composer. Sized to comfortably exceed the composer's
+              height (~108px) on every layout. */}
+          <div aria-hidden="true" className="h-28 shrink-0 sm:h-32" />
           <div ref={endRef} />
         </div>
       </section>

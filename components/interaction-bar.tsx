@@ -32,7 +32,15 @@ export function InteractionBar({
   }
 
   return (
-    <div className="sticky bottom-0 z-10 px-4 pb-6 pt-2 sm:px-8 md:px-12">
+    <div
+      className="sticky bottom-0 z-20 px-4 pt-2 sm:px-8 md:px-12"
+      style={{
+        // Honor the device's safe area (e.g. iPhone home indicator) so
+        // the composer never tucks under it. We add it on top of the
+        // base 1.5rem we used to apply via `pb-6`.
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)",
+      }}
+    >
       <form
         onSubmit={handleSubmit}
         className="rounded-[28px] bg-background/70 px-5 pb-4 pt-4 backdrop-blur-xl sm:px-6"
