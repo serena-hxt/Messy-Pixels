@@ -33,26 +33,14 @@ export function InteractionBar({
 
   return (
     <>
-      {/* Fixed input bar — positioned at bottom with high z-index */}
+      {/* Input bar — sits at the bottom of the flex column naturally.
+          z-10 ensures it layers above the artwork frame's absolute overlay. */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-20 px-4 pt-2 sm:px-8 md:px-12"
+        className="relative z-10 shrink-0 px-4 pb-6 pt-2 sm:px-8 md:px-12"
         style={{
-          // Honor the device's safe area (e.g. iPhone home indicator) so
-          // the composer never tucks under it. We add it on top of the
-          // base 1.5rem we used to apply via `pb-6`.
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)",
         }}
       >
-        {/* Background gradient — sits behind the input form to prevent 
-            message text from showing through when scrolling. */}
-        <div
-          className="absolute inset-0 -z-10 pointer-events-none"
-          style={{
-            background: "linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 20%, rgba(255,255,255,0.8) 60%, rgba(255,255,255,1) 100%)",
-          }}
-          aria-hidden="true"
-        />
-        
         <form
           onSubmit={handleSubmit}
           className="rounded-[28px] bg-background/70 px-5 pb-4 pt-4 backdrop-blur-xl sm:px-6"
@@ -128,3 +116,4 @@ export function InteractionBar({
     </>
   )
 }
+

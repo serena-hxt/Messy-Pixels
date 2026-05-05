@@ -85,17 +85,17 @@ export function BitsyCard({ onAsk }: BitsyCardProps) {
   }
 
   return (
-    <section className="flex flex-1 flex-col items-center justify-center px-4 py-6 sm:px-8 md:px-12 md:py-10">
-      <div className="perspective-1200 w-full max-w-sm md:max-w-md">
+    <section className="flex flex-1 flex-col items-center justify-start overflow-hidden px-4 pt-4 pb-2 sm:px-8 md:px-12">
+      <div className="perspective-1200 flex w-full max-w-sm flex-col md:max-w-md" style={{ flex: "1 1 0", minHeight: 0 }}>
         <button
           type="button"
           onClick={() => setFlipped((f) => !f)}
           aria-label={flipped ? "Hide artwork of the day" : "Reveal artwork of the day"}
           aria-pressed={flipped}
-          className="relative h-[60vh] max-h-[680px] w-full rounded-[36px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-[70vh]"
+          className="relative w-full flex-1 min-h-0 rounded-[36px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <div
-            className="preserve-3d relative h-full w-full transition-transform duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+            className="preserve-3d absolute inset-0 transition-transform duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{
               transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
             }}

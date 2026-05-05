@@ -204,7 +204,7 @@ export default function HomePage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                className="flex flex-1 flex-col"
+                className="flex flex-1 flex-col overflow-hidden min-h-0"
               >
                 {hasConversation ? (
                   <ChatThread

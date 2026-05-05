@@ -313,13 +313,7 @@ export function ChatThread({
       <section
         ref={scrollRef}
         className="flex flex-1 flex-col overflow-y-auto px-4 py-6 sm:px-8 md:px-12"
-        style={{ 
-          overscrollBehavior: "contain", 
-          touchAction: "pan-y",
-          // Add bottom padding equal to fixed input bar height + safe area
-          // This prevents messages from being covered by the fixed input bar
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 200px)",
-        }}
+        style={{ overscrollBehavior: "contain", touchAction: "pan-y" }}
         aria-live="polite"
         aria-label="Conversation with Bitsy"
       >
