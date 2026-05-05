@@ -1,13 +1,14 @@
 "use client"
 
 import type React from "react"
-import { Camera, Mic, ImagePlus, ArrowUp } from "lucide-react"
+import { Camera, BookOpen, Mic, ImagePlus, ArrowUp } from "lucide-react"
 
 interface InteractionBarProps {
   input: string
   onInputChange: (value: string) => void
   onSubmit: () => void
   onCamera: () => void
+  onAlbum: () => void
   onCanvas: () => void
   status: "submitted" | "streaming" | "ready" | "error"
 }
@@ -17,6 +18,7 @@ export function InteractionBar({
   onInputChange,
   onSubmit,
   onCamera,
+  onAlbum,
   onCanvas,
   status,
 }: InteractionBarProps) {
@@ -50,15 +52,27 @@ export function InteractionBar({
         />
 
         <div className="mt-5 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onCamera}
-            aria-label="Open camera (Lens)"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            style={{ border: "0.75px solid rgba(26,26,31,0.28)" }}
-          >
-            <Camera className="h-[16px] w-[16px]" strokeWidth={1.25} aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onCamera}
+              aria-label="Open camera (Lens)"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ border: "0.75px solid rgba(26,26,31,0.28)" }}
+            >
+              <Camera className="h-[16px] w-[16px]" strokeWidth={1.25} aria-hidden="true" />
+            </button>
+
+            <button
+              type="button"
+              onClick={onAlbum}
+              aria-label="Open album of popular works"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ border: "0.75px solid rgba(26,26,31,0.28)" }}
+            >
+              <BookOpen className="h-[16px] w-[16px]" strokeWidth={1.25} aria-hidden="true" />
+            </button>
+          </div>
 
           <div className="flex items-center gap-5">
             <button

@@ -16,6 +16,7 @@ import { MenuDrawer, type MenuDestination } from "@/components/menu-drawer"
 import { ProfileView } from "@/components/profile-view"
 import { GalleryView } from "@/components/gallery-view"
 import { MakerQuiz } from "@/components/maker-quiz"
+import { HomeAlbumView } from "@/components/home-album-view"
 import { deriveSessionTitle, upsertSession, type ChatSession } from "@/lib/storage"
 import { useSelectedArtwork, type Artwork } from "@/contexts/selected-artwork-context"
 import { findDefaultAnswer } from "@/lib/artwork-default-answers"
@@ -31,6 +32,7 @@ export interface SavedDrawing {
 export default function HomePage() {
   const [input, setInput] = useState("")
   const [lensOpen, setLensOpen] = useState(false)
+  const [albumOpen, setAlbumOpen] = useState(false)
   const [canvasOpen, setCanvasOpen] = useState(false)
   const [canvasStartWithReference, setCanvasStartWithReference] = useState(false)
   const [drawings, setDrawings] = useState<SavedDrawing[]>([])
@@ -247,6 +249,7 @@ export default function HomePage() {
                   onInputChange={setInput}
                   onSubmit={handleSubmit}
                   onCamera={() => setLensOpen(true)}
+                  onAlbum={() => setAlbumOpen(true)}
                   onCanvas={() => {
                     if (selectedArtwork) {
                       setCanvasStartWithReference(true)
@@ -295,6 +298,60 @@ export default function HomePage() {
             }}
           />
         )}
+
+        <HomeAlbumView
+          open={albumOpen}
+          onClose={() => setAlbumOpen(false)}
+          onSelect={(curated, artwork) => {
+            // Set the selected artwork so the chat thread (and later canvas)
+            // know which work the user is engaging with. We prefer the
+            // resolved HAM Artwork; if that's null we still fall back to
+            // a synthetic record built from the curated registry so the
+            // chat thread's ArtworkCard can render an image.
+            const fallbackArtwork: Artwork =
+              artwork ?? {
+                id: curated.objectid,
+                title: curated.title,
+                artist: curated.artist,
+                primaryimageurl: curated.fallbackImageUrl ?? "",
+                commentary: "",
+                colors: [],
+                medium: "",
+              }
+            setSelectedArtwork(fallbackArtwork)
+            setCurrentArtworkId(curated.objectid)
+
+            // Synthesize the same first question Lens uses so the existing
+            // default-answer registry can supply Bitsy's response without
+            // an API call. This keeps the album → chat flow consistent
+            // with the lens → chat flow.
+            const question = `What makes "${curated.title}" by ${curated.artist} significant in art history?`
+            const defaultQA = findDefaultAnswer(question, curated.objectid)
+
+            const userMsg: UIMessage = {
+              id: `synth_user_${Date.now()}`,
+              role: "user",
+              parts: [{ type: "text", text: question }],
+              createdAt: new Date(),
+            }
+            if (defaultQA) {
+              const assistantMsg: UIMessage = {
+                id: `synth_assistant_${Date.now()}`,
+                role: "assistant",
+                parts: [{ type: "text", text: defaultQA.answer }],
+                createdAt: new Date(),
+              }
+              setSyntheticMessages((prev) => [...prev, userMsg, assistantMsg])
+              setPendingFollowUps(defaultQA.followUps)
+            } else {
+              // No pre-baked answer for this work — fall back to the AI.
+              setSyntheticMessages((prev) => [...prev, userMsg])
+              setPendingFollowUps(null)
+              sendMessage({ text: question })
+            }
+            setAlbumOpen(false)
+          }}
+        />
 
         <MenuDrawer
           open={menuOpen}

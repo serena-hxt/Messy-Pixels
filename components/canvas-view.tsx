@@ -13,48 +13,23 @@ import {
   Pencil,
   PenLine,
   RefreshCw,
-  Save,
   Shuffle,
-  Smile,
   Trash2,
   Type,
   Sparkles,
   Droplets,
-  Undo2,
-  Wand2,
   X,
 } from "lucide-react"
 import { useSelectedArtwork } from "@/contexts/selected-artwork-context"
-import {
-  addToGallery,
-  loadMakerProfile,
-  loadProfile,
-  MAKER_PROFILE_INFO,
-  type GalleryItem,
-  type MakerProfileType,
-  type PrivacyLevel,
-} from "@/lib/storage"
+import { loadMakerProfile, MAKER_PROFILE_INFO, type MakerProfileType } from "@/lib/storage"
 import { getPromptForProfile, shufflePrompt, FREE_CREATE_PROMPT, type CreativePrompt } from "@/lib/prompts"
 import { CURATED_ARTWORKS, type CuratedArtwork } from "@/lib/curated-artworks"
-import {
-  composeOverlaysToCanvas,
-  newOverlayId,
-  STICKER_LABELS,
-  STICKER_ORDER,
-  type CanvasOverlay,
-  type RemixMode,
-  type StickerKind,
-  type StickerOverlay,
-  type TextOverlay,
-} from "@/lib/canvas-overlays"
-import { buildRemixOverlays, REMIX_PRESETS } from "@/lib/canvas-remix"
-import { CanvasOverlayLayer, StickerSvg } from "@/components/canvas-overlay-layer"
-import { SaveModal } from "@/components/save-modal"
 
 /* -------------------------------------------------------------------------- */
 /* Types & Constants                                                           */
 /* -------------------------------------------------------------------------- */
 
+type Mode = "draw" | "text"
 type BrushType = "pencil" | "pen" | "oil" | "watercolor" | "wax"
 
 interface BrushPreset {
@@ -282,10 +257,12 @@ export function CanvasView({
   const palette = useMemo(() => buildPalette(selectedArtwork?.colors), [selectedArtwork])
   const initialBrush = useMemo(() => defaultBrushForMedium(selectedArtwork?.medium), [selectedArtwork])
 
+  const [mode, setMode] = useState<Mode>("draw")
   const [brushType, setBrushType] = useState<BrushType>(initialBrush)
   const [color, setColor] = useState<string>(palette[0] ?? "#1a1a1f")
   const [brushSize, setBrushSize] = useState<number>(4)
   const [brushTransparency, setBrushTransparency] = useState<number>(100)
+  const [note, setNote] = useState<string>("")
   const [hasInk, setHasInk] = useState(false)
 
   // Prompt state — personalized based on maker profile
@@ -319,31 +296,6 @@ export function CanvasView({
   )
 
   // Album picker — floating popup at bottom-left of the canvas.
-  const [albumOpen, setAlbumOpen] = useState(false)
-
-  // ---------- Overlays (movable text + stickers) ----------
-  const [overlays, setOverlays] = useState<CanvasOverlay[]>([])
-  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null)
-  const [editingTextId, setEditingTextId] = useState<string | null>(null)
-
-  // ---------- Remix preset ----------
-  const [remixMode, setRemixMode] = useState<RemixMode>(null)
-
-  // ---------- Save modal ----------
-  const [saveModalOpen, setSaveModalOpen] = useState(false)
-  const [savePreviewUrl, setSavePreviewUrl] = useState<string | null>(null)
-
-  // ---------- Undo history ----------
-  // Each snapshot stores per-layer pixel dataURLs + the full overlay list +
-  // the active remix mode, so undo restores both raster strokes and overlays.
-  type Snapshot = {
-    layerData: (string | null)[]
-    overlays: CanvasOverlay[]
-    remix: RemixMode
-  }
-  const historyRef = useRef<Snapshot[]>([])
-  const [canUndo, setCanUndo] = useState(false)
-  const MAX_HISTORY = 25
 
   // Sync brush + palette when a new artwork is selected mid-session.
   const lastArtworkIdRef = useRef<number | null>(null)
@@ -531,16 +483,12 @@ export function CanvasView({
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (mode !== "draw") return
     e.preventDefault()
     const idx = activeLayerRef.current
     const canvas = layerRefs.current[idx]
     if (!canvas) return
     if (!layers[idx]?.visible) return // can't draw on a hidden layer
-    // Tap on empty area clears overlay selection.
-    setSelectedOverlayId(null)
-    setEditingTextId(null)
-    // Snapshot BEFORE the stroke begins so Undo can revert this stroke.
-    pushSnapshot()
     canvas.setPointerCapture?.(e.pointerId)
     drawingRef.current = true
     // Mark this layer as occupied so the album skips it when picking next slot.
@@ -560,7 +508,7 @@ export function CanvasView({
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!drawingRef.current) return
+    if (!drawingRef.current || mode !== "draw") return
     const idx = activeLayerRef.current
     const canvas = layerRefs.current[idx]
     if (!canvas) return
@@ -574,7 +522,7 @@ export function CanvasView({
   }
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (!drawingRef.current) return
+    if (mode !== "draw") return
     drawingRef.current = false
     lastPtRef.current = null
     const idx = activeLayerRef.current
@@ -670,11 +618,9 @@ export function CanvasView({
         )
         setActiveLayer(targetIdx)
         setHasInk(true)
-        setAlbumOpen(false)
       }
       img.onerror = () => {
-        // Image blocked or failed — close the album quietly, no crash.
-        setAlbumOpen(false)
+        // Image blocked or failed — fail silently, no crash.
       }
       img.src = url
     },
@@ -686,146 +632,9 @@ export function CanvasView({
     setHasInk(false)
   }
 
-  /* ---------------- Undo: snapshot & restore ---------------- */
+  /* ---------------- Compose final image on close ---------------- */
 
-  // Capture a Snapshot of the current canvas state (raster + overlays + remix).
-  const pushSnapshot = useCallback(() => {
-    const layerData = layerRefs.current.map((c) => {
-      try {
-        return c ? c.toDataURL("image/png") : null
-      } catch {
-        return null
-      }
-    })
-    historyRef.current.push({ layerData, overlays: [...overlays], remix: remixMode })
-    if (historyRef.current.length > MAX_HISTORY) {
-      historyRef.current.shift()
-    }
-    setCanUndo(true)
-  }, [overlays, remixMode])
-
-  const undo = useCallback(() => {
-    const snap = historyRef.current.pop()
-    setCanUndo(historyRef.current.length > 0)
-    if (!snap) return
-
-    // Restore overlays + remix
-    setOverlays(snap.overlays)
-    setRemixMode(snap.remix)
-    setSelectedOverlayId(null)
-    setEditingTextId(null)
-
-    // Restore each layer's pixel data
-    snap.layerData.forEach((dataUrl, i) => {
-      const canvas = layerRefs.current[i]
-      if (!canvas) return
-      const ctx = canvas.getContext("2d")
-      if (!ctx) return
-      ctx.save()
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.restore()
-      if (!dataUrl) return
-      const img = new Image()
-      img.onload = () => {
-        const ctx2 = canvas.getContext("2d")
-        if (!ctx2) return
-        ctx2.save()
-        ctx2.setTransform(1, 0, 0, 1, 0, 0)
-        ctx2.drawImage(img, 0, 0)
-        ctx2.restore()
-      }
-      img.src = dataUrl
-    })
-
-    // Recompute layer-has-content from snapshot (best-effort: assume same).
-    setLayerHasContent((prev) =>
-      prev.map((had, i) => had || Boolean(snap.layerData[i])),
-    )
-    setHasInk(snap.overlays.length > 0 || snap.layerData.some((d) => Boolean(d)))
-  }, [])
-
-  /* ---------------- Overlay add / move / delete ---------------- */
-
-  const getCanvasCenter = () => {
-    const rect = containerRef.current?.getBoundingClientRect()
-    return {
-      x: (rect?.width ?? 600) / 2,
-      y: (rect?.height ?? 400) / 2,
-    }
-  }
-
-  const addTextOverlay = useCallback(() => {
-    pushSnapshot()
-    const center = getCanvasCenter()
-    const id = newOverlayId()
-    const next: TextOverlay = {
-      id,
-      kind: "text",
-      x: center.x,
-      y: center.y,
-      text: "Type here",
-      color: "#1a1a1f",
-      fontSize: 28,
-      weight: "bold",
-      family: "sans",
-    }
-    setOverlays((prev) => [...prev, next])
-    setSelectedOverlayId(id)
-    setEditingTextId(id) // immediately enter edit mode
-    setHasInk(true)
-  }, [pushSnapshot])
-
-  const addStickerOverlay = useCallback(
-    (kind: StickerKind) => {
-      pushSnapshot()
-      const center = getCanvasCenter()
-      const id = newOverlayId()
-      const next: StickerOverlay = {
-        id,
-        kind: "sticker",
-        sticker: kind,
-        x: center.x,
-        y: center.y,
-        size: 80,
-        color: kind === "heart" ? "#e76f51" : kind === "ufo" ? "#5ebdff" : "#1a1a1f",
-      }
-      setOverlays((prev) => [...prev, next])
-      setSelectedOverlayId(id)
-      setHasInk(true)
-    },
-    [pushSnapshot],
-  )
-
-  /* ---------------- Remix presets ---------------- */
-
-  const applyRemixPreset = useCallback(
-    (mode: NonNullable<RemixMode>) => {
-      const rect = containerRef.current?.getBoundingClientRect()
-      if (!rect) return
-      pushSnapshot()
-      // Build the preset's overlays sized to current canvas.
-      const presetOverlays = buildRemixOverlays(mode, rect.width, rect.height)
-      // Replace any prior remix overlays (we don't tag them; user can keep their
-      // own additions by undoing instead).
-      setOverlays(presetOverlays)
-      setRemixMode(mode)
-      setSelectedOverlayId(null)
-      setEditingTextId(null)
-      setHasInk(true)
-    },
-    [pushSnapshot],
-  )
-
-  const remixFrameStyle = useMemo(() => {
-    if (!remixMode) return null
-    const preset = REMIX_PRESETS.find((p) => p.id === remixMode)
-    return preset?.frameStyle ?? null
-  }, [remixMode])
-
-  /* ---------------- Compose final image ---------------- */
-
-  const composeFinalImage = useCallback((): string | null => {
+  const composeFinalImage = (): string | null => {
     const container = containerRef.current
     if (!container) return null
     const rect = container.getBoundingClientRect()
@@ -855,76 +664,13 @@ export function CanvasView({
       if (c) ctx.drawImage(c, 0, 0)
     })
 
-    // Overlays (text + stickers) — stored in CSS pixels, so scale by DPR.
-    if (overlays.length > 0) {
-      ctx.save()
-      ctx.scale(dpr, dpr)
-      composeOverlaysToCanvas(ctx, overlays)
-      ctx.restore()
-    }
-
-    // Remix frame: emulate inset borders for movie-poster, neon, dreamy modes.
-    drawRemixFrame(ctx, out.width, out.height, dpr, remixMode)
-
     return out.toDataURL("image/png")
-  }, [referenceEnabled, referenceOpacity, layers, overlays, remixMode])
-
-  /* ---------------- Save flow ---------------- */
-
-  const openSaveModal = useCallback(() => {
-    const dataUrl = composeFinalImage()
-    if (!dataUrl) return
-    setSavePreviewUrl(dataUrl)
-    setSaveModalOpen(true)
-  }, [composeFinalImage])
-
-  const handleSaveCreation = useCallback(
-    ({ title, privacy }: { title: string; privacy: PrivacyLevel }) => {
-      const dataUrl = savePreviewUrl
-      if (!dataUrl) return
-      const author = loadProfile().displayName
-      const rect = containerRef.current?.getBoundingClientRect()
-      const item: GalleryItem = {
-        id: `gal_${Date.now()}`,
-        dataUrl,
-        title,
-        author,
-        likes: 0,
-        createdAt: Date.now(),
-        isMine: true,
-        privacy,
-        artworkId: selectedArtwork?.id,
-        artworkTitle: selectedArtwork?.title,
-        prompt: currentPrompt?.text,
-        makerProfile: currentPrompt?.profile ?? makerProfile ?? undefined,
-        remixMode,
-        overlays: overlays as unknown[],
-        canvasWidth: rect?.width,
-        canvasHeight: rect?.height,
-      }
-      addToGallery(item)
-      setSaveModalOpen(false)
-      setSavePreviewUrl(null)
-      // Close the canvas without re-saving via legacy flow.
-      onClose()
-    },
-    [
-      savePreviewUrl,
-      selectedArtwork,
-      currentPrompt,
-      makerProfile,
-      remixMode,
-      overlays,
-      onClose,
-    ],
-  )
+  }
 
   const handleClose = () => {
-    // Legacy close path (back arrow): pass the composed image to the chat
-    // thread so the user can show their work in the conversation.
     const dataUrl = composeFinalImage()
-    if (dataUrl && (hasInk || overlays.length > 0)) {
-      onClose({ dataUrl })
+    if (dataUrl && hasInk) {
+      onClose({ dataUrl, note: note.trim() || undefined })
     } else {
       onClose()
     }
@@ -1072,12 +818,10 @@ export function CanvasView({
           style={{
             backgroundColor: "#ffffff",
             boxShadow:
-              remixFrameStyle?.boxShadow ??
               "0 1px 0 rgba(255,255,255,0.9) inset, 0 24px 48px -28px rgba(60,70,90,0.22), 0 4px 14px -8px rgba(60,70,90,0.12)",
             border: "0.5px solid rgba(26,26,31,0.08)",
             touchAction: "none",
-            cursor: "crosshair",
-            transition: "box-shadow 200ms ease",
+            cursor: mode === "draw" ? "crosshair" : "default",
           }}
           aria-label="Drawing canvas"
         >
@@ -1102,170 +846,51 @@ export function CanvasView({
             />
           ))}
 
-          {!hasInk && overlays.length === 0 && (
+          {!hasInk && mode === "draw" && (
             <p className="pointer-events-none absolute bottom-5 right-5 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/30">
               tap & drag to sketch
             </p>
           )}
 
-          {/* Floating Album button — bottom-left of the canvas */}
-          <div className="absolute bottom-4 left-4 z-20">
-              {/* Popup panel — appears above the button when open */}
-              {albumOpen && (
-                <div
-                  className="mb-3 w-[260px] sm:w-[300px] rounded-2xl p-3"
-                  style={{
-                    backgroundColor: "rgba(255,255,255,0.85)",
-                    backdropFilter: "blur(20px) saturate(140%)",
-                    WebkitBackdropFilter: "blur(20px) saturate(140%)",
-                    border: "0.5px solid rgba(26,26,31,0.12)",
-                    boxShadow: "0 18px 40px -16px rgba(60,70,90,0.28)",
-                  }}
-                >
-                  <div className="mb-2 flex items-center justify-between px-1">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/55">
-                      popular works
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setAlbumOpen(false)}
-                      className="rounded-full p-1 text-foreground/45 transition-colors hover:text-foreground/80"
-                      aria-label="Close album"
-                    >
-                      <X className="h-3.5 w-3.5" strokeWidth={1.5} />
-                    </button>
-                  </div>
-
-                  <div
-                    className="grid grid-cols-3 gap-2 overflow-y-auto pr-1"
-                    style={{ maxHeight: "220px" }}
-                  >
-                    {CURATED_ARTWORKS.filter((a) => Boolean(a.fallbackImageUrl)).map((artwork) => (
-                      <button
-                        key={artwork.objectid}
-                        type="button"
-                        onClick={() => addArtworkToLayer(artwork)}
-                        className="group flex flex-col items-stretch gap-1 rounded-xl p-1 text-left transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
-                        aria-label={`Add ${artwork.title} by ${artwork.artist} as a new layer`}
-                      >
-                        <div
-                          className="aspect-square w-full overflow-hidden rounded-md bg-foreground/5"
-                          style={{ border: "0.5px solid rgba(26,26,31,0.1)" }}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={artwork.fallbackImageUrl}
-                            alt=""
-                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                            loading="lazy"
-                            draggable={false}
-                          />
-                        </div>
-                        <p className="line-clamp-2 px-0.5 font-mono text-[9px] leading-tight text-foreground/65">
-                          {artwork.artist}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-
-                  <p className="mt-2 px-1 font-mono text-[9px] uppercase tracking-[0.18em] text-foreground/40">
-                    tap to add as a new layer
-                  </p>
-                </div>
-              )}
-
-              {/* Album toggle button */}
-              <button
-                type="button"
-                onClick={() => setAlbumOpen((v) => !v)}
-                aria-label="Open album of popular works"
-                aria-expanded={albumOpen}
-                className="flex h-12 w-12 items-center justify-center rounded-full transition-all"
-                style={{
-                  background: "linear-gradient(145deg, #ffffff, #eef0f4)",
-                  boxShadow: albumOpen
-                    ? "inset 3px 3px 7px #d1d9e6, inset -3px -3px 7px #ffffff"
-                    : "4px 4px 10px rgba(209,217,230,0.9), -4px -4px 10px rgba(255,255,255,0.95)",
-                  border: albumOpen ? "1.5px solid rgba(26,26,31,0.4)" : "0.5px solid rgba(26,26,31,0.08)",
-                }}
-              >
-                <BookOpen className="h-5 w-5 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
-              </button>
-            </div>
-
-          {/* Overlay layer — text + sticker DOM elements over the canvas */}
-          <CanvasOverlayLayer
-            overlays={overlays}
-            selectedId={selectedOverlayId}
-            editingTextId={editingTextId}
-            onClearSelection={() => {
-              setSelectedOverlayId(null)
-              setEditingTextId(null)
-            }}
-            onSelect={setSelectedOverlayId}
-            onUpdate={(id, patch) => {
-              setOverlays((prev) =>
-                prev.map((o) => (o.id === id ? ({ ...o, ...patch } as CanvasOverlay) : o)),
-              )
-              setHasInk(true)
-            }}
-            onDelete={(id) => {
-              pushSnapshot()
-              setOverlays((prev) => prev.filter((o) => o.id !== id))
-              if (selectedOverlayId === id) setSelectedOverlayId(null)
-              if (editingTextId === id) setEditingTextId(null)
-            }}
-            onDragStart={() => pushSnapshot()}
-            onSetEditingText={setEditingTextId}
-          />
         </div>
       </div>
 
       {/* Toolbar */}
       <div className="sticky bottom-0 z-10 px-4 pb-6 sm:px-8 md:px-12">
-        <DrawToolbar
-          color={color}
-          brushSize={brushSize}
-          brushType={brushType}
-          brushTransparency={brushTransparency}
-          palette={palette}
-          layers={layers}
-          activeLayer={activeLayer}
-          referenceEnabled={referenceEnabled}
-          referenceOpacity={referenceOpacity}
-          hasReference={Boolean(selectedArtwork?.primaryimageurl)}
-          remixMode={remixMode}
-          canUndo={canUndo}
-          hasInk={hasInk || overlays.length > 0}
-          onColorChange={setColor}
-          onBrushSizeChange={setBrushSize}
-          onBrushTypeChange={setBrushType}
-          onBrushTransparencyChange={setBrushTransparency}
-          onLayerSelect={setActiveLayer}
-          onLayerToggle={toggleLayerVisibility}
-          onReferenceToggle={() => setReferenceEnabled((v) => !v)}
-          onReferenceOpacityChange={setReferenceOpacity}
-          onAddText={addTextOverlay}
-          onAddSticker={addStickerOverlay}
-          onApplyRemix={applyRemixPreset}
-          onUndo={undo}
-          onClear={clearActiveLayer}
-          onSave={openSaveModal}
-        />
+        {mode === "draw" ? (
+          <DrawToolbar
+            color={color}
+            brushSize={brushSize}
+            brushType={brushType}
+            brushTransparency={brushTransparency}
+            palette={palette}
+            layers={layers}
+            activeLayer={activeLayer}
+            referenceEnabled={referenceEnabled}
+            referenceOpacity={referenceOpacity}
+            hasReference={Boolean(selectedArtwork?.primaryimageurl)}
+            onColorChange={setColor}
+            onBrushSizeChange={setBrushSize}
+            onBrushTypeChange={setBrushType}
+            onBrushTransparencyChange={setBrushTransparency}
+            onLayerSelect={setActiveLayer}
+            onLayerToggle={toggleLayerVisibility}
+            onReferenceToggle={() => setReferenceEnabled((v) => !v)}
+            onReferenceOpacityChange={setReferenceOpacity}
+            onSwitchToText={() => setMode("text")}
+            onAddArtwork={addArtworkToLayer}
+            onClear={clearActiveLayer}
+            hasInk={hasInk}
+          />
+        ) : (
+          <TextToolbar
+            note={note}
+            onNoteChange={setNote}
+            onSwitchToDraw={() => setMode("draw")}
+            onSubmit={handleClose}
+          />
+        )}
       </div>
-
-      {/* Save modal — opens when user clicks Save in the toolbar */}
-      {saveModalOpen && savePreviewUrl && (
-        <SaveModal
-          previewUrl={savePreviewUrl}
-          defaultTitle={selectedArtwork ? `After ${selectedArtwork.title}` : ""}
-          onSave={handleSaveCreation}
-          onCancel={() => {
-            setSaveModalOpen(false)
-            setSavePreviewUrl(null)
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -1274,7 +899,15 @@ export function CanvasView({
 /* DrawToolbar                                                                 */
 /* -------------------------------------------------------------------------- */
 
-type Panel = "none" | "size" | "color" | "brush" | "layers" | "reference"
+type Panel =
+  | "none"
+  | "size"
+  | "color"
+  | "brush"
+  | "layers"
+  | "reference"
+  | "transparency"
+  | "album"
 
 function DrawToolbar({
   color,
@@ -1296,6 +929,7 @@ function DrawToolbar({
   onReferenceToggle,
   onReferenceOpacityChange,
   onSwitchToText,
+  onAddArtwork,
   onClear,
   hasInk,
 }: {
@@ -1318,10 +952,60 @@ function DrawToolbar({
   onReferenceToggle: () => void
   onReferenceOpacityChange: (v: number) => void
   onSwitchToText: () => void
+  onAddArtwork: (artwork: CuratedArtwork) => void
   onClear: () => void
   hasInk: boolean
 }) {
   const [panel, setPanel] = useState<Panel>("none")
+  /* ---------------- Adaptive pagination ---------------- */
+  /*
+    The toolbar splits into two functional pages — Page 1 holds the
+    creation tools (text, brush, size, color, transparency) and Page 2
+    holds the management tools (album on the far left, layers, reference,
+    clear). On wide containers we collapse both pages back into a single
+    unified row so nothing is hidden when there's room. We measure the
+    container with a ResizeObserver and switch based on whether the inner
+    "if this were single-row" width would exceed the available space.
+  */
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const [paginated, setPaginated] = useState(true)
+  const [currentPage, setCurrentPage] = useState<0 | 1>(0)
+  // Touch-swipe tracking — start X recorded on touchstart, distance on touchend.
+  const touchStartXRef = useRef<number | null>(null)
+
+  // Approximate single-row width: 9 buttons + gaps + padding. We keep this
+  // in sync with the actual button widths used below (h-11 w-11 = 44px,
+  // gap-2 = 8px, px-3 wrapper = 24px total padding).
+  const SINGLE_ROW_THRESHOLD = 9 * 44 + 8 * 8 + 24 + 16 // small safety margin
+
+  useEffect(() => {
+    const el = wrapperRef.current
+    if (!el) return
+    const update = () => {
+      const w = el.clientWidth
+      const shouldPaginate = w < SINGLE_ROW_THRESHOLD
+      setPaginated(shouldPaginate)
+      // Snap back to page 0 whenever we collapse into a single row so we
+      // never end up rendering page 1 with no dot to indicate it.
+      if (!shouldPaginate) setCurrentPage(0)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+    // SINGLE_ROW_THRESHOLD is a stable constant — no need to depend on it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // When the user opens a panel, jump to the page that owns it so the
+  // popup doesn't appear above an icon they can't see.
+  useEffect(() => {
+    if (!paginated || panel === "none") return
+    const PAGE_1: Panel[] = ["brush", "size", "color", "transparency"]
+    const PAGE_2: Panel[] = ["album", "layers", "reference"]
+    if (PAGE_1.includes(panel)) setCurrentPage(0)
+    else if (PAGE_2.includes(panel)) setCurrentPage(1)
+  }, [panel, paginated])
 
   const togglePanel = (target: Panel) =>
     setPanel((prev) => (prev === target ? "none" : target))
@@ -1594,168 +1278,587 @@ function DrawToolbar({
         </div>
       )}
 
-      {/* Main toolbar row */}
+      {/* Album panel — popup grid of curated artworks. Mirrors the other
+          panels' glass surface, anchored above the album button. */}
+      {panel === "album" && (
+        <div style={panelStyle}>
+          <div className="mb-2 flex items-center justify-between px-1">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/55">
+              popular works
+            </p>
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-foreground/40">
+              tap to add layer
+            </p>
+          </div>
+          <div
+            className="grid grid-cols-3 gap-2 overflow-y-auto pr-1"
+            style={{ maxHeight: "200px" }}
+          >
+            {CURATED_ARTWORKS.filter((a) => Boolean(a.fallbackImageUrl)).map(
+              (artwork) => (
+                <button
+                  key={artwork.objectid}
+                  type="button"
+                  onClick={() => {
+                    onAddArtwork(artwork)
+                    setPanel("none")
+                  }}
+                  className="group flex flex-col items-stretch gap-1 rounded-xl p-1 text-left transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
+                  aria-label={`Add ${artwork.title} by ${artwork.artist} as a new layer`}
+                >
+                  <div
+                    className="aspect-square w-full overflow-hidden rounded-md bg-foreground/5"
+                    style={{ border: "0.5px solid rgba(26,26,31,0.1)" }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={artwork.fallbackImageUrl}
+                      alt=""
+                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                      loading="lazy"
+                      draggable={false}
+                    />
+                  </div>
+                  <p className="line-clamp-2 px-0.5 font-mono text-[9px] leading-tight text-foreground/65">
+                    {artwork.artist}
+                  </p>
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main toolbar — adaptive: a single unified row when the container
+          has room, otherwise a 2-page swipeable layout with pagination dots. */}
       <div
-        className="flex items-center gap-2 rounded-[28px] px-3 py-3"
-        style={{
-          backgroundColor: "#f0f2f5",
-          boxShadow:
-            "inset 6px 6px 12px #d1d9e6, inset -6px -6px 12px #ffffff, 0 12px 30px -12px rgba(60,70,90,0.1)",
+        ref={wrapperRef}
+        className="flex flex-col"
+        onTouchStart={(e) => {
+          if (!paginated) return
+          touchStartXRef.current = e.touches[0]?.clientX ?? null
+        }}
+        onTouchEnd={(e) => {
+          if (!paginated) return
+          const start = touchStartXRef.current
+          touchStartXRef.current = null
+          if (start == null) return
+          const end = e.changedTouches[0]?.clientX ?? start
+          const delta = end - start
+          // Threshold tuned for thumb-sized swipes; ignore taps + tiny drags.
+          if (Math.abs(delta) < 32) return
+          if (delta < 0 && currentPage === 0) setCurrentPage(1)
+          else if (delta > 0 && currentPage === 1) setCurrentPage(0)
         }}
       >
-        {/* Text mode */}
-        <button
-          type="button"
-          onClick={onSwitchToText}
-          aria-label="Switch to text input"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-          style={neu}
-        >
-          <Type className="h-4 w-4 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
-        </button>
-
-        {/* Brush type */}
-        <button
-          type="button"
-          onClick={() => togglePanel("brush")}
-          aria-label="Change brush"
-          aria-expanded={panel === "brush"}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
+        {/* The toolbar surface — same neumorphic shell as before, but now
+            holds either a single row or a paginated viewport. */}
+        <div
+          className="overflow-hidden rounded-[28px] px-3 py-3"
           style={{
-            ...neu,
-            border: panel === "brush" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
-          }}
-          title={BRUSH_PRESETS[brushType].label}
-        >
-          <ActiveBrushIcon className="h-4 w-4 text-foreground/80" strokeWidth={1.5} />
-        </button>
-
-        {/* Brush size */}
-        <button
-          type="button"
-          onClick={() => togglePanel("size")}
-          aria-label="Change brush size"
-          aria-expanded={panel === "size"}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
-          style={{
-            ...neu,
-            border: panel === "size" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
+            backgroundColor: "#f0f2f5",
+            boxShadow:
+              "inset 6px 6px 12px #d1d9e6, inset -6px -6px 12px #ffffff, 0 12px 30px -12px rgba(60,70,90,0.1)",
           }}
         >
-          <span
-            className="block rounded-full bg-foreground"
-            style={{ width: Math.max(3, brushSize * 1.2), height: Math.max(3, brushSize * 1.2) }}
-          />
-        </button>
+          {paginated ? (
+            <div
+              className="flex"
+              style={{
+                width: "200%",
+                transform: `translateX(${currentPage === 0 ? "0%" : "-50%"})`,
+                transition: "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
+            >
+              {/* Page 1 — Creation tools */}
+              <div
+                className="flex w-1/2 items-center gap-2"
+                aria-hidden={currentPage !== 0}
+              >
+                <TextButton onSwitchToText={onSwitchToText} neu={neu} />
+                <BrushTypeButton
+                  panel={panel}
+                  togglePanel={togglePanel}
+                  ActiveBrushIcon={ActiveBrushIcon}
+                  brushType={brushType}
+                  neu={neu}
+                />
+                <BrushSizeButton
+                  panel={panel}
+                  togglePanel={togglePanel}
+                  brushSize={brushSize}
+                  neu={neu}
+                />
+                <ColorButton
+                  panel={panel}
+                  togglePanel={togglePanel}
+                  color={color}
+                  neu={neu}
+                />
+                <TransparencyButton
+                  panel={panel}
+                  togglePanel={togglePanel}
+                  brushTransparency={brushTransparency}
+                  neu={neu}
+                />
+                {/* push the row to the left, mirroring the spacer on Page 2 */}
+                <div className="flex-1" />
+              </div>
 
-        {/* Color */}
-        <button
-          type="button"
-          onClick={() => togglePanel("color")}
-          aria-label="Change color"
-          aria-expanded={panel === "color"}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
-          style={{
-            ...neu,
-            border: panel === "color" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
-          }}
-        >
-          <span
-            className="block h-6 w-6 rounded-full"
-            style={{ backgroundColor: color, border: "0.5px solid rgba(26,26,31,0.18)" }}
-          />
-        </button>
+              {/* Page 2 — Management tools (Album on the far left) */}
+              <div
+                className="flex w-1/2 items-center gap-2"
+                aria-hidden={currentPage !== 1}
+              >
+                <AlbumButton
+                  panel={panel}
+                  togglePanel={togglePanel}
+                  neu={neu}
+                />
+                <LayersButton
+                  panel={panel}
+                  togglePanel={togglePanel}
+                  activeLayer={activeLayer}
+                  neu={neu}
+                />
+                <ReferenceButton
+                  panel={panel}
+                  togglePanel={togglePanel}
+                  referenceEnabled={referenceEnabled}
+                  neu={neu}
+                />
+                <div className="flex-1" />
+                {hasInk ? <ClearButton onClear={onClear} neu={neu} /> : null}
+              </div>
+            </div>
+          ) : (
+            /* Single-row mode — every icon visible at once */
+            <div className="flex items-center gap-2">
+              <AlbumButton
+                panel={panel}
+                togglePanel={togglePanel}
+                neu={neu}
+              />
+              <TextButton onSwitchToText={onSwitchToText} neu={neu} />
+              <BrushTypeButton
+                panel={panel}
+                togglePanel={togglePanel}
+                ActiveBrushIcon={ActiveBrushIcon}
+                brushType={brushType}
+                neu={neu}
+              />
+              <BrushSizeButton
+                panel={panel}
+                togglePanel={togglePanel}
+                brushSize={brushSize}
+                neu={neu}
+              />
+              <ColorButton
+                panel={panel}
+                togglePanel={togglePanel}
+                color={color}
+                neu={neu}
+              />
+              <TransparencyButton
+                panel={panel}
+                togglePanel={togglePanel}
+                brushTransparency={brushTransparency}
+                neu={neu}
+              />
+              <div className="flex-1" />
+              <LayersButton
+                panel={panel}
+                togglePanel={togglePanel}
+                activeLayer={activeLayer}
+                neu={neu}
+              />
+              <ReferenceButton
+                panel={panel}
+                togglePanel={togglePanel}
+                referenceEnabled={referenceEnabled}
+                neu={neu}
+              />
+              {hasInk ? <ClearButton onClear={onClear} neu={neu} /> : null}
+            </div>
+          )}
+        </div>
 
-        {/* Transparency */}
-        <button
-          type="button"
-          onClick={() => togglePanel("transparency")}
-          aria-label="Adjust brush transparency"
-          aria-expanded={panel === "transparency"}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
-          style={{
-            ...neu,
-            border: panel === "transparency" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
-          }}
-          title={`Transparency: ${brushTransparency}%`}
-        >
-          <span
-            className="font-mono text-[10px] font-semibold text-foreground/80"
-            style={{ opacity: brushTransparency / 100 }}
+        {/* Pagination dots — only when paginated, anchored just below
+            the toolbar. Click on a dot to jump pages directly. */}
+        {paginated && (
+          <div
+            className="mt-2 flex items-center justify-center gap-1.5"
+            role="tablist"
+            aria-label="Toolbar pages"
           >
-            A
-          </span>
-        </button>
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Layers */}
-        <button
-          type="button"
-          onClick={() => togglePanel("layers")}
-          aria-label="Manage layers"
-          aria-expanded={panel === "layers"}
-          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
-          style={{
-            ...neu,
-            border: panel === "layers" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
-          }}
-          title={`Active: layer ${activeLayer + 1}`}
-        >
-          <Layers className="h-4 w-4 text-foreground/80" strokeWidth={1.5} />
-          <span
-            className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full font-mono text-[9px]"
-            style={{
-              backgroundColor: "rgba(26,26,31,0.85)",
-              color: "#f5f5f4",
-            }}
-          >
-            {activeLayer + 1}
-          </span>
-        </button>
-
-        {/* Reference overlay */}
-        <button
-          type="button"
-          onClick={() => togglePanel("reference")}
-          aria-label="Reference image overlay"
-          aria-expanded={panel === "reference"}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
-          style={{
-            ...neu,
-            border:
-              panel === "reference" || referenceEnabled
-                ? "1.5px solid rgba(26,26,31,0.4)"
-                : "none",
-          }}
-          title="Import original"
-        >
-          <ImageIcon
-            className="h-4 w-4"
-            strokeWidth={1.5}
-            style={{
-              color: referenceEnabled ? "rgba(26,26,31,0.95)" : "rgba(26,26,31,0.6)",
-            }}
-          />
-        </button>
-
-        {/* Clear */}
-        {hasInk ? (
-          <button
-            type="button"
-            onClick={onClear}
-            aria-label="Clear active layer"
-            className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/65"
-            style={neu}
-          >
-            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-            clear
-          </button>
-        ) : null}
+            {[0, 1].map((i) => {
+              const active = currentPage === i
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  aria-label={`Go to ${i === 0 ? "creation" : "management"} tools`}
+                  onClick={() => setCurrentPage(i as 0 | 1)}
+                  className="rounded-full transition-all"
+                  style={{
+                    width: active ? 18 : 6,
+                    height: 6,
+                    backgroundColor: active
+                      ? "rgba(26,26,31,0.75)"
+                      : "rgba(26,26,31,0.22)",
+                  }}
+                />
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
+/* -------------------------------------------------------------------------- */
+/* Toolbar button building blocks                                              */
+/* -------------------------------------------------------------------------- */
+/*
+  Each button is extracted into a tiny presentational component so the same
+  JSX can be rendered into either the single-row layout or one of the two
+  paginated pages without duplicating styles. They keep the original
+  neumorphic + active-state styling intact.
+*/
 
+function TextButton({
+  onSwitchToText,
+  neu,
+}: {
+  onSwitchToText: () => void
+  neu: React.CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSwitchToText}
+      aria-label="Switch to text input"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+      style={neu}
+    >
+      <Type className="h-4 w-4 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
+    </button>
+  )
+}
+
+function BrushTypeButton({
+  panel,
+  togglePanel,
+  ActiveBrushIcon,
+  brushType,
+  neu,
+}: {
+  panel: Panel
+  togglePanel: (p: Panel) => void
+  ActiveBrushIcon: (props: { className?: string; strokeWidth?: number }) => JSX.Element
+  brushType: BrushType
+  neu: React.CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => togglePanel("brush")}
+      aria-label="Change brush"
+      aria-expanded={panel === "brush"}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
+      style={{
+        ...neu,
+        border: panel === "brush" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
+      }}
+      title={BRUSH_PRESETS[brushType].label}
+    >
+      <ActiveBrushIcon className="h-4 w-4 text-foreground/80" strokeWidth={1.5} />
+    </button>
+  )
+}
+
+function BrushSizeButton({
+  panel,
+  togglePanel,
+  brushSize,
+  neu,
+}: {
+  panel: Panel
+  togglePanel: (p: Panel) => void
+  brushSize: number
+  neu: React.CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => togglePanel("size")}
+      aria-label="Change brush size"
+      aria-expanded={panel === "size"}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
+      style={{
+        ...neu,
+        border: panel === "size" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
+      }}
+    >
+      <span
+        className="block rounded-full bg-foreground"
+        style={{ width: Math.max(3, brushSize * 1.2), height: Math.max(3, brushSize * 1.2) }}
+      />
+    </button>
+  )
+}
+
+function ColorButton({
+  panel,
+  togglePanel,
+  color,
+  neu,
+}: {
+  panel: Panel
+  togglePanel: (p: Panel) => void
+  color: string
+  neu: React.CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => togglePanel("color")}
+      aria-label="Change color"
+      aria-expanded={panel === "color"}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
+      style={{
+        ...neu,
+        border: panel === "color" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
+      }}
+    >
+      <span
+        className="block h-6 w-6 rounded-full"
+        style={{ backgroundColor: color, border: "0.5px solid rgba(26,26,31,0.18)" }}
+      />
+    </button>
+  )
+}
+
+function TransparencyButton({
+  panel,
+  togglePanel,
+  brushTransparency,
+  neu,
+}: {
+  panel: Panel
+  togglePanel: (p: Panel) => void
+  brushTransparency: number
+  neu: React.CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => togglePanel("transparency")}
+      aria-label="Adjust brush transparency"
+      aria-expanded={panel === "transparency"}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
+      style={{
+        ...neu,
+        border: panel === "transparency" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
+      }}
+      title={`Transparency: ${brushTransparency}%`}
+    >
+      <span
+        className="font-mono text-[10px] font-semibold text-foreground/80"
+        style={{ opacity: brushTransparency / 100 }}
+      >
+        A
+      </span>
+    </button>
+  )
+}
+
+function AlbumButton({
+  panel,
+  togglePanel,
+  neu,
+}: {
+  panel: Panel
+  togglePanel: (p: Panel) => void
+  neu: React.CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => togglePanel("album")}
+      aria-label="Open album of popular works"
+      aria-expanded={panel === "album"}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
+      style={{
+        ...neu,
+        border: panel === "album" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
+      }}
+      title="Album"
+    >
+      <BookOpen className="h-4 w-4 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
+    </button>
+  )
+}
+
+function LayersButton({
+  panel,
+  togglePanel,
+  activeLayer,
+  neu,
+}: {
+  panel: Panel
+  togglePanel: (p: Panel) => void
+  activeLayer: number
+  neu: React.CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => togglePanel("layers")}
+      aria-label="Manage layers"
+      aria-expanded={panel === "layers"}
+      className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
+      style={{
+        ...neu,
+        border: panel === "layers" ? "1.5px solid rgba(26,26,31,0.4)" : "none",
+      }}
+      title={`Active: layer ${activeLayer + 1}`}
+    >
+      <Layers className="h-4 w-4 text-foreground/80" strokeWidth={1.5} />
+      <span
+        className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full font-mono text-[9px]"
+        style={{
+          backgroundColor: "rgba(26,26,31,0.85)",
+          color: "#f5f5f4",
+        }}
+      >
+        {activeLayer + 1}
+      </span>
+    </button>
+  )
+}
+
+function ReferenceButton({
+  panel,
+  togglePanel,
+  referenceEnabled,
+  neu,
+}: {
+  panel: Panel
+  togglePanel: (p: Panel) => void
+  referenceEnabled: boolean
+  neu: React.CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => togglePanel("reference")}
+      aria-label="Reference image overlay"
+      aria-expanded={panel === "reference"}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all"
+      style={{
+        ...neu,
+        border:
+          panel === "reference" || referenceEnabled
+            ? "1.5px solid rgba(26,26,31,0.4)"
+            : "none",
+      }}
+      title="Import original"
+    >
+      <ImageIcon
+        className="h-4 w-4"
+        strokeWidth={1.5}
+        style={{
+          color: referenceEnabled ? "rgba(26,26,31,0.95)" : "rgba(26,26,31,0.6)",
+        }}
+      />
+    </button>
+  )
+}
+
+function ClearButton({
+  onClear,
+  neu,
+}: {
+  onClear: () => void
+  neu: React.CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClear}
+      aria-label="Clear active layer"
+      className="flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/65"
+      style={neu}
+    >
+      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+      clear
+    </button>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* TextToolbar                                                                 */
+/* -------------------------------------------------------------------------- */
+
+function TextToolbar({
+  note,
+  onNoteChange,
+  onSwitchToDraw,
+  onSubmit,
+}: {
+  note: string
+  onNoteChange: (v: string) => void
+  onSwitchToDraw: () => void
+  onSubmit: () => void
+}) {
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSubmit()
+      }}
+      className="flex items-center gap-3 rounded-[28px] px-3 py-3"
+      style={{
+        backgroundColor: "#f0f2f5",
+        boxShadow:
+          "inset 6px 6px 12px #d1d9e6, inset -6px -6px 12px #ffffff, 0 12px 30px -12px rgba(60,70,90,0.1)",
+      }}
+    >
+      <div
+        className="flex flex-1 items-center rounded-full px-4 py-2"
+        style={{
+          background: "linear-gradient(145deg, #eef0f4, #ffffff)",
+          boxShadow:
+            "inset 4px 4px 8px rgba(209,217,230,0.9), inset -4px -4px 8px rgba(255,255,255,0.95)",
+        }}
+      >
+        <input
+          type="text"
+          value={note}
+          onChange={(e) => onNoteChange(e.target.value)}
+          placeholder="Describe your artistic thoughts..."
+          aria-label="Artistic note"
+          autoComplete="off"
+          className="w-full bg-transparent font-mono text-[13px] font-light text-foreground placeholder:text-foreground/40 focus:outline-none"
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={onSwitchToDraw}
+        aria-label="Switch to drawing"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+        style={{
+          background: "linear-gradient(145deg, #ffffff, #eef0f4)",
+          boxShadow: "4px 4px 10px rgba(209,217,230,0.9), -4px -4px 10px rgba(255,255,255,0.95)",
+        }}
+      >
+        <Pencil className="h-4 w-4 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
+      </button>
+    </form>
+  )
+}

@@ -196,13 +196,6 @@ export interface GalleryItem {
   makerProfile?: MakerProfileType
   /** Comments on this item. */
   comments?: { id: string; author: string; text: string; createdAt: number }[]
-  /** Active remix preset when this creation was saved (for re-render hints). */
-  remixMode?: "movie-poster" | "meme" | "futuristic" | "dreamy" | null
-  /** Serialized overlay elements (text + stickers) at save time. */
-  overlays?: unknown[]
-  /** Stored canvas dimensions (CSS pixels) so overlays re-render to scale. */
-  canvasWidth?: number
-  canvasHeight?: number
 }
 
 const GALLERY_KEY = "bitsy:gallery"
