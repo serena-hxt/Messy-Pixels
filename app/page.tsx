@@ -41,7 +41,7 @@ export default function HomePage() {
   const [pendingFollowUps, setPendingFollowUps] = useState<[string, string] | null>(null)
   // Current artwork ID for follow-up context
   const [currentArtworkId, setCurrentArtworkId] = useState<number | null>(null)
-  const { setSelectedArtwork } = useSelectedArtwork()
+  const { selectedArtwork, setSelectedArtwork } = useSelectedArtwork()
   const lastTriggeredMessageIdRef = useRef<string | null>(null)
   const canvasCloseRef = useRef<(() => void) | null>(null)
   const sessionIdRef = useRef<string | null>(null)
