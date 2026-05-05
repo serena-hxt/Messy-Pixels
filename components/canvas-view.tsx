@@ -1558,7 +1558,7 @@ function BrushTypeButton({
 }: {
   panel: Panel
   togglePanel: (p: Panel) => void
-  ActiveBrushIcon: (props: { className?: string; strokeWidth?: number }) => JSX.Element
+  ActiveBrushIcon: React.ComponentType<{ className?: string; strokeWidth?: number }>
   brushType: BrushType
   neu: React.CSSProperties
 }) {
