@@ -402,21 +402,30 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
               }}
             />
 
-            {/* Top bar: × close on left, danmaku ON|OFF on right */}
-            <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 pt-5">
+            {/* Top bar: Danmaku input + controls — highest z-index, glassmorphism */}
+            <div
+              className="absolute inset-x-0 top-0 z-30 flex items-center gap-3 px-5 pt-5 pb-3"
+              style={{
+                background: "linear-gradient(180deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 100%)",
+              }}
+            >
+              {/* Close button */}
               <button
                 type="button"
                 aria-label="Close artwork view, return to camera"
                 onClick={clearTwin}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/10 font-mono text-[18px] leading-none text-white/80 backdrop-blur-md transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/25 bg-white/10 font-mono text-[18px] leading-none text-white/80 backdrop-blur-xl transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
               >
                 ×
               </button>
+
+              {/* Danmaku input — glassmorphic, expands to fill */}
+              <ArtworkComments artworkId={digitalTwin.id} inputOnly />
             </div>
 
-            {/* Comments — danmaku layer fills the space between top bar and bottom panel */}
-            <div className="absolute inset-x-0 top-[64px] bottom-[230px] z-10 overflow-hidden px-5 flex flex-col">
-              <ArtworkComments artworkId={digitalTwin.id} />
+            {/* Danmaku floating layer — fills the space between top bar and bottom panel */}
+            <div className="absolute inset-x-0 top-[80px] bottom-[230px] z-10 overflow-hidden px-5">
+              <ArtworkComments artworkId={digitalTwin.id} floatingOnly />
             </div>
 
             {/* Bottom panel: title + 2 AI question prompts */}
