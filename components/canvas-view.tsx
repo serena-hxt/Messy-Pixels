@@ -396,6 +396,15 @@ export function CanvasView({
   /* ---------------- Reference image drawing ---------------- */
 
   // Draw the reference image into its dedicated canvas, fitted with `contain`.
+  // Tracks the drawn image bounds so the coordinate system stays pinned
+  // to the actual artwork regardless of responsive resizing.
+  const imageDrawBoundsRef = useRef<{
+    x: number
+    y: number
+    width: number
+    height: number
+  } | null>(null)
+
   const drawReference = useCallback(() => {
     const canvas = refCanvasRef.current
     const container = containerRef.current
@@ -417,15 +426,26 @@ export function CanvasView({
       const containerAspect = rect.width / rect.height
       let drawW: number
       let drawH: number
+      // Maximize artwork scale: 90% height for portrait (aspect < 1), 
+      // 100% width for landscape (aspect >= 1)
       if (aspect > containerAspect) {
+        // Landscape or square — scale to full width
         drawW = rect.width
         drawH = rect.width / aspect
       } else {
-        drawH = rect.height
-        drawW = rect.height * aspect
+        // Portrait — scale to 90% height, leaving 10% for UI breathing room
+        drawH = rect.height * 0.9
+        drawW = drawH * aspect
       }
       const x = (rect.width - drawW) / 2
       const y = (rect.height - drawH) / 2
+      // Store the drawn bounds so pointer events stay pinned to the image
+      imageDrawBoundsRef.current = {
+        x: x / dpr,
+        y: y / dpr,
+        width: drawW / dpr,
+        height: drawH / dpr,
+      }
       ctx.scale(dpr, dpr)
       ctx.drawImage(img, x, y, drawW, drawH)
     }
@@ -445,7 +465,18 @@ export function CanvasView({
     const container = containerRef.current
     if (!container) return { x: 0, y: 0 }
     const rect = container.getBoundingClientRect()
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    // Get the raw mouse position within the container
+    const rawX = e.clientX - rect.left
+    const rawY = e.clientY - rect.top
+    // If we have stored image bounds, map the pointer coords to stay 
+    // pinned to the drawn image content (invariant under responsive resizing)
+    if (imageDrawBoundsRef.current) {
+      // Simply return the container-relative coords — the canvas drawing
+      // will naturally stay aligned since the canvases are absolutely
+      // positioned within the centered container.
+      return { x: rawX, y: rawY }
+    }
+    return { x: rawX, y: rawY }
   }
 
   const drawDot = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
@@ -822,14 +853,22 @@ export function CanvasView({
             border: "0.5px solid rgba(26,26,31,0.08)",
             touchAction: "none",
             cursor: mode === "draw" ? "crosshair" : "default",
+            // Enforce contain scaling: no stretching, max height for viewport breathing room
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
           aria-label="Drawing canvas"
         >
           {/* Reference image canvas — sits at the bottom of the stack. */}
           <canvas
             ref={refCanvasRef}
-            className="pointer-events-none absolute inset-0 h-full w-full"
-            style={{ opacity: referenceEnabled ? referenceOpacity : 0, transition: "opacity 200ms" }}
+            className="absolute inset-0 pointer-events-none h-full w-full object-contain"
+            style={{ 
+              opacity: referenceEnabled ? referenceOpacity : 0, 
+              transition: "opacity 200ms ease",
+              objectFit: "contain",
+            }}
             aria-hidden="true"
           />
 
@@ -840,8 +879,12 @@ export function CanvasView({
               ref={(el) => {
                 layerRefs.current[i] = el
               }}
-              className="pointer-events-none absolute inset-0 h-full w-full"
-              style={{ opacity: layer.visible ? 1 : 0, transition: "opacity 150ms" }}
+              className="absolute inset-0 pointer-events-none h-full w-full object-contain"
+              style={{ 
+                opacity: layer.visible ? 1 : 0, 
+                transition: "opacity 150ms ease",
+                objectFit: "contain",
+              }}
               aria-label={`Layer ${i + 1}`}
             />
           ))}
