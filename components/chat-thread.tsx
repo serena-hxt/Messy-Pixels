@@ -125,7 +125,7 @@ export function ChatThread({
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([])
   const [detailArtwork, setDetailArtwork] = useState<Artwork | null>(null)
 
-  const { setSelectedArtwork } = useSelectedArtwork()
+  const { setSelectedArtwork, selectedArtwork } = useSelectedArtwork()
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
@@ -203,6 +203,32 @@ export function ChatThread({
         aria-label="Conversation with Bitsy"
       >
         <div className="mx-auto flex w-full max-w-md flex-col gap-4 md:max-w-lg lg:max-w-2xl">
+          {/* Display selected artwork at the top of chat if available */}
+          {selectedArtwork?.primaryimageurl && (
+            <figure
+              className="mb-2 overflow-hidden rounded-[24px] bg-background/70 p-3 backdrop-blur-xl"
+              style={{
+                border: "0.75px solid rgba(26,26,31,0.15)",
+                boxShadow: "0 12px 30px -16px rgba(60, 70, 90, 0.15)",
+              }}
+            >
+              <div
+                className="overflow-hidden rounded-[16px] bg-white"
+                style={{ border: "0.5px solid rgba(26,26,31,0.1)" }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selectedArtwork.primaryimageurl}
+                  alt={`${selectedArtwork.title} by ${selectedArtwork.artist || "unknown artist"}`}
+                  className="h-auto w-full"
+                />
+              </div>
+              <figcaption className="mt-3 px-1 font-mono text-[12px] text-foreground/65">
+                <div className="font-medium">{selectedArtwork.title}</div>
+                <div className="text-foreground/50">{selectedArtwork.artist}</div>
+              </figcaption>
+            </figure>
+          )}
           {items.map((item) => {
             if (item.kind === "drawing") {
               return (

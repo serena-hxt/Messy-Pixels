@@ -246,7 +246,12 @@ export default function HomePage() {
                   onInputChange={setInput}
                   onSubmit={handleSubmit}
                   onCamera={() => setLensOpen(true)}
-                  onCanvas={() => setCanvasOpen(true)}
+                  onCanvas={() => {
+                    if (selectedArtwork) {
+                      setCanvasStartWithReference(true)
+                    }
+                    setCanvasOpen(true)
+                  }}
                   status={status}
                 />
               </motion.section>

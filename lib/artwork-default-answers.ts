@@ -764,6 +764,49 @@ Finally, examine how Homer painted the fog itself — that gray wall advancing f
           "What techniques did Homer use to create the sense of fog?",
         ],
       },
+      // Follow-up answers for Homer
+      {
+        question: "Why did Homer live such an isolated life in Maine?",
+        answer: `Homer's choice to live alone in Prouts Neck, Maine, was deliberate and defining. After establishing his reputation in New York and Boston, he retreated to near-hermitage to focus on his art and his dialogue with the sea.
+
+He built a studio directly on the ocean, where he could observe light, weather, and waves in all conditions. Visitors reported he was gruff, private, and fiercely protective of his time. When admirers asked for paintings, he often refused or quoted prices so high they assumed he was joking.
+
+This isolation was partly temperament but also strategy. Away from the New York art world's pressures and politics, Homer worked on his own terms. The Adirondacks and the sea provided subjects of inexhaustible complexity — the play of light on water, the psychology of labor, the confrontation between man and nature.
+
+By the time he died in 1910, Homer was recognized as America's greatest painter, but on his terms: a recluse who had transcended the need for approval.`,
+        followUps: [
+          "What did Homer paint besides the sea?",
+          "Why was Homer's isolation unusual for an artist of his stature?",
+        ],
+      },
+      {
+        question: "How dangerous was Grand Banks fishing in the 1880s?",
+        answer: `Grand Banks fishing was extraordinarily dangerous. The waters off Newfoundland were cold, stormy, and far from rescue. Dories — small boats like the one in this painting — could be swamped in minutes. Fog could descend unexpectedly, disorienting fishermen and separating them from their mother ships.
+
+Many fishermen drowned annually. The catch had to be magnificent to justify the risk. Halibut were one of the most valuable catches — enough money in a single successful haul to support a family for months. But that prosperity was always conditional on return.
+
+Homer painted this world with unflinching realism. The contemporary artist Childe Hassam criticized Homer for making art "look like real work," but that was precisely the point. Homer refused to romanticize labor or downplay its dangers for the sake of aesthetic pleasure.
+
+The Grand Banks economy collapsed in the 1890s as fish stocks declined, but Homer had already documented its last golden era. His paintings are now the primary visual record of that world.`,
+        followUps: [
+          "What happened to the Grand Banks fishing industry?",
+          "How did other artists depict labor differently from Homer?",
+        ],
+      },
+      {
+        question: "What techniques did Homer use to create the sense of fog?",
+        answer: `Homer's fog is a masterpiece of restraint and psychology. Rather than painting fog as a romantic haze, he painted it as an oncoming threat — a solid gray wall advancing across the composition.
+
+He used limited color: warm ochres and reds on the fisherman and boat, then a rapid transition into cool grays and blues as the fog approaches. This color shift alone creates the sense of encroaching cold.
+
+The brushwork also shifts. The foreground is detailed and precise — every rope, every pleat of the man's shirt is visible. The middle distance becomes looser, hazier. The fog itself is almost empty, painted with dry brush that suggests obscurity and danger.
+
+Compositionally, Homer used scale. The fisherman is small against the vast fog and empty sea. This scale imbalance heightens our sense of human vulnerability. We feel the vastness closing in.`,
+        followUps: [
+          "How did Homer use color symbolically in his seascapes?",
+          "What other artists were contemporaries of Homer in 19th-century America?",
+        ],
+      },
     ],
   },
   {
@@ -797,6 +840,63 @@ Finally, feel the silence. Despite showing four children, this isn't a lively or
           "How does the painting change as the girls get older?",
         ],
       },
+      // Follow-up answers for Sargent
+      {
+        question: "What was Sargent's relationship with Velázquez's Las Meninas?",
+        answer: `Sargent was obsessed with Las Meninas, arguably the greatest painting in Western art. He studied it, copied parts of it, and made a pilgrimage to see it in Madrid multiple times. It was his north star for understanding how to paint psychology through composition.
+
+Like Velázquez, Sargent created ambiguity and psychological depth through spatial arrangement. In Las Meninas, the princess seems small and central despite being surrounded by attendants; Velázquez himself is painting in the background. Where is the focus? The painting refuses a single answer.
+
+Sargent applied this lesson to The Daughters. The viewer isn't sure whether to look at the youngest girl (most prominent) or the older, more mysterious figures receding into shadow. The Japanese vases don't belong to the daughters — they contain the space. Just as Velázquez used objects and space to create psychological complexity, Sargent did too.
+
+This homage reveals something important: Sargent saw himself not as a society portrait painter but as a serious artist grappling with the deepest problems of representation.`,
+        followUps: [
+          "What other painters were influenced by Velázquez?",
+          "How did Sargent's approach to portraiture differ from other society painters?",
+        ],
+      },
+      {
+        question: "Why did Sargent include so much empty dark space?",
+        answer: `The darkness isn't a mistake or an unfinished background. It's a deliberate choice that creates the painting's power. The empty space suggests these girls exist in a kind of psychological isolation, even gathered together.
+
+The darkness also emphasizes light. The youngest girl's face and dress are brilliantly lit; this contrast makes her presence electric. The older girls fade into shadow, which older art historians read as the loss of youth's glow — innocence receding.
+
+The composition makes the vases more ominous. They emerge from the darkness like monuments or tombstones. Rather than celebrating the family's wealth, they seem to cage or contain the children.
+
+This approach was radical. Academic portraiture would have filled the background with status symbols — furniture, landscape, architectural details. Sargent's emptiness is psychologically probing rather than decorative.`,
+        followUps: [
+          "What other artists used emptiness and darkness symbolically?",
+          "How do modern viewers interpret Sargent's darkness differently from his contemporaries?",
+        ],
+      },
+      {
+        question: "How does the painting change as the girls get older?",
+        answer: `The progression is unmissable once you notice it: left to right, top to bottom, the girls move from light into shadow, from full visibility into obscurity.
+
+The youngest, positioned lowest and most forward, is caught in what feels like a spotlight. Her pale dress, her relative openness and directness to the viewer — she occupies a position of privilege and exposure.
+
+As you follow the composition upward and backward, the older sisters become harder to read. Their features are less distinct. Their postures are stiffer, more formal. The one in back seems almost to disappear into shadow.
+
+This can be read as a meditation on aging — the brightness of youth fading into the dimness of adulthood and responsibility. But it's also technically brilliant. Sargent shows us that portraiture isn't just about capturing a likeness; it's about exploring states of being. The youngest sister is "there" in a way the older ones are not.`,
+        followUps: [
+          "What other artworks show the passage of time within a single image?",
+          "How did Sargent respond to criticism of this painting?",
+        ],
+      },
+      {
+        question: "What happened to the Boit daughters later in life?",
+        answer: `This is where the melancholy deepens. Historical records show that none of the four Boit daughters ever married. In their era, particularly for women of their social standing, this was unusual and often meant a life of limited agency.
+
+The youngest, Mary Louisa, died relatively young. The others lived longer but apparently led quiet, unremarkable lives. They remained in their father's household or visited relatives, but there's little record of significant accomplishments or autonomous lives.
+
+Some art historians speculate that Sargent, by temperament and training sensitive to psychological undercurrents, somehow sensed this bleak future and captured it in the painting. The darkness may not be prophetic but rather empathetic — his intuitive understanding of the constraints these girls faced.
+
+The painting haunts us because we know what the girls became: not, perhaps, unhappy, but certainly circumscribed — contained by the expectations and limitations of their era, much like the vases contain the space.`,
+        followUps: [
+          "What were the typical life options for wealthy women in the 1880s?",
+          "Have art historians found primary sources from the Boit family?",
+        ],
+      },
     ],
   },
   {
@@ -822,12 +922,69 @@ Cézanne painted slowly, sometimes leaving canvases for months before returning.
 
 Look at the red armchair: it's as much a subject as Hortense herself. Cézanne was obsessed with how objects exist in space, and the chair creates a frame within the frame. Notice how the red seems to push forward while the muted greens and blues of her dress recede.
 
-Examine the brushwork — it's deliberate, almost architectural. Each stroke is placed with intention, building form the way a mason builds a wall. There's none of Impressionism's flicker; Cézanne wanted solidity, permanence.
+Examine the brushwork — it's deliberate, almost architectural. Each stroke is placed with intention, building form the way a mason builds a wall. There's none of Impressionism's flicker; C��zanne wanted solidity, permanence.
 
 Finally, look for the geometry. Her face is simplified into planes. The chair is reduced to essential curves. Even the background is organized into color blocks. Cézanne was finding the cylinder, sphere, and cone in everything — his famous formula for understanding nature.`,
         followUps: [
           "What did Cézanne mean by finding the cylinder, sphere, and cone?",
           "Why are the colors in this portrait so muted compared to other artists?",
+        ],
+      },
+      // Follow-up answers for Cézanne
+      {
+        question: "Why did Cézanne paint Hortense so many times?",
+        answer: `Hortense's face was an inexhaustible problem for Cézanne. She represented a challenge: how to reduce a human face to its essential geometry while maintaining its presence as a living, breathing being.
+
+Each portrait tackled the problem differently. In some versions, her face is almost mask-like; in others, more naturalistic. Some show her looking at us; others have her gaze averted. Cézanne was experimenting, iterating, trying to find the solution to representing form and structure.
+
+There was also a domestic reason: she was there. Hortense was the convenient model, available for endless sittings. Their difficult marriage meant she understood his obsessive methods and tolerated the long hours required.
+
+Finally, there's the romantic explanation: beneath the artist's theoretical project was a man grappling with ambivalence about the woman he'd married. The repeated paintings suggest an attempt to understand her, to find the truth of her character beneath surfaces.`,
+        followUps: [
+          "How many Hortense portraits did Cézanne actually paint?",
+          "What happened to Cézanne and Hortense's relationship over time?",
+        ],
+      },
+      {
+        question: "How did Cézanne influence Picasso and Cubism?",
+        answer: `Cézanne was the bridge between traditional painting and modernism. When Picasso saw Cézanne's work, he recognized that representation didn't require realistic rendering. Objects could be shown from multiple viewpoints; perspective could be fractured; form could be abstracted.
+
+The Cubist principle of showing an object from many viewpoints simultaneously was directly inspired by Cézanne's tilted tables, fractured space, and multiple perspectives. Picasso and Braque both acknowledged Cézanne as the father of modern painting.
+
+Cézanne's statement about "treating nature by the cylinder, the sphere, the cone" became Cubism's theoretical foundation. If all objects reduce to basic geometric forms, then those forms are the primary subject, not the illusion of appearance.
+
+What Cézanne began as formal exploration, Cubism developed into a systematic language for modern art. He died in 1906, and by 1909, Cubism was in full bloom, but Cézanne had provided the philosophical and artistic foundation.`,
+        followUps: [
+          "What is the Cubist movement and who were its key figures?",
+          "How did other art movements respond to Cézanne's innovations?",
+        ],
+      },
+      {
+        question: "What did Cézanne mean by finding the cylinder, sphere, and cone?",
+        answer: `This famous dictum — that all objects in nature reduce to cylinders, spheres, and cones — was Cézanne's attempt to systematize how we see. He wasn't literal; he wasn't saying every object is geometrically pure. Rather, he meant that underlying the appearance of any thing are basic geometric forms.
+
+A tree trunk is a cylinder; an apple is a sphere; a mountain is a cone. By thinking in these terms, the artist gains control over representation. Instead of copying surfaces, you're organizing form.
+
+This was radical because it shifted painting from representation to structure. The goal wasn't to capture likeness but to reveal the underlying architecture of things. It's a philosophical position: beneath the chaos of appearance lies geometric order.
+
+Cézanne practiced this relentlessly. His still lifes are arrangements of geometric forms. His faces are built from planes and angles. His landscapes are organized into interlocking shapes. The method sounds dry, but the results are full of life — the geometry doesn't diminish vitality; it clarifies it.`,
+        followUps: [
+          "How did Cézanne's geometric approach differ from Renaissance perspective?",
+          "What other artists have used geometric principles in abstract ways?",
+        ],
+      },
+      {
+        question: "Why are the colors in this portrait so muted compared to other artists?",
+        answer: `Cézanne's palette here is deliberately restrained — warm ochres, muted reds, soft grays, and blues. This is very different from the intense colors the Impressionists used, or even from his own earlier work.
+
+He was making a choice: color should serve structure, not vice versa. Bright, intense colors can distract from form; they can flatten the painting into decoration. Cézanne wanted form to emerge through color modulation, the way light and shadow build three-dimensionality.
+
+The muted palette also connects to his engagement with the Old Masters. Looking at paintings by Venetian artists and Poussin, Cézanne learned that restraint could carry more power than extravagance. A small shift in value, a subtle color relationship, conveys more than a shout.
+
+There's also philosophical content: Hortense, sitting in her red armchair, is not a jewel to admire but a presence to understand. The muted colors reflect her stoic, enduring quality — not decoration but presence.`,
+        followUps: [
+          "How did Cézanne's color use evolve over his lifetime?",
+          "Why was Cézanne interested in Venetian and Classical painters?",
         ],
       },
     ],

@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { Camera, Mic, Pencil, ArrowUp } from "lucide-react"
+import { Camera, Mic, ImagePlus, ArrowUp } from "lucide-react"
 
 interface InteractionBarProps {
   input: string
@@ -71,10 +71,10 @@ export function InteractionBar({
             <button
               type="button"
               onClick={onCanvas}
-              aria-label="Open drawing canvas"
+              aria-label="Edit image on canvas"
               className="rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Pencil className="h-[20px] w-[20px]" strokeWidth={1.5} aria-hidden="true" />
+              <ImagePlus className="h-[20px] w-[20px]" strokeWidth={1.5} aria-hidden="true" />
             </button>
 
             {input.trim().length > 0 && (
