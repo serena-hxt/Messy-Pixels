@@ -340,12 +340,18 @@ type Item =
   })
   drawings.forEach((d) => {
     if (!drawingAnchorRef.current.has(d.id)) {
+      // Snapshot of messages.length at first observation. If there are 9
+      // messages now (indices 0..8), anchor=9; the drawing then sorts at
+      // 8.5 — strictly AFTER message[8] but BEFORE any message that lands
+      // at index 9 later (such as the scripted hand-and-flower reward
+      // image and evaluation that arrive 5 seconds afterward).
       drawingAnchorRef.current.set(d.id, messages.length)
     }
     const anchor = drawingAnchorRef.current.get(d.id)!
-    // +0.5 keeps it strictly between message[anchor-1] and message[anchor];
-    // d.createdAt/1e13 disambiguates two drawings created back-to-back.
-    items.push({ kind: "drawing", key: d.id, t: anchor + 0.5 + d.createdAt / 1e13, node: d })
+    // anchor - 0.5 places the drawing between message[anchor-1] and
+    // message[anchor]. d.createdAt/1e13 disambiguates two drawings created
+    // back-to-back without ever bumping past 0.5.
+    items.push({ kind: "drawing", key: d.id, t: anchor - 0.5 + d.createdAt / 1e13, node: d })
   })
   // Stable sort: preserves order for equal timestamps
   items.sort((a, b) => a.t - b.t)
