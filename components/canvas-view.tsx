@@ -821,7 +821,20 @@ export function CanvasView({
         ) : (
           <button
             type="button"
-            onClick={() => setPromptVisible(true)}
+            onClick={() => {
+              // Ensure a prompt exists before revealing the panel. If the
+              // user never completed the maker quiz, currentPrompt is null
+              // and just toggling promptVisible would keep this button on
+              // screen (since the render condition is `promptVisible && currentPrompt`).
+              // Fall back to the maker-profile prompt when available, otherwise
+              // use FREE_CREATE_PROMPT so something always appears.
+              if (!currentPrompt) {
+                setCurrentPrompt(
+                  makerProfile ? getPromptForProfile(makerProfile) : FREE_CREATE_PROMPT,
+                )
+              }
+              setPromptVisible(true)
+            }}
             className="flex items-center gap-2 rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground/50 hover:text-foreground/70 transition-colors"
             style={{ border: "0.5px dashed rgba(26,26,31,0.2)" }}
           >
