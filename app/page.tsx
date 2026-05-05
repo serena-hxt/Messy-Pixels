@@ -228,8 +228,10 @@ export default function HomePage() {
           }
           setSyntheticMessages((prev) => [...prev, userMsg])
 
-          // 2) Two-second thinking pause, then deliver the pre-generated
+          // 2) Five-second thinking pause, then deliver the pre-generated
           //    reward image + evaluation as two sequential Bitsy bubbles.
+          //    The longer pause gives the user a beat to admire their drawing
+          //    before Bitsy responds to their gesture.
           setTimeout(() => {
             const nextStepIndex = scriptedFlow.stepIndex + 1
             if (nextStepIndex < branch.steps.length) {
@@ -263,7 +265,7 @@ export default function HomePage() {
                 setPendingFollowUps(null)
               }
             }
-          }, 2000)
+          }, 5000)
 
           return
         }
