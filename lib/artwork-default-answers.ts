@@ -28,7 +28,13 @@ export interface ScriptedBranch {
   objectid: number
   steps: {
     response: string
-    nextPrompt?: string // Prompt to show after this response
+    userPrompt?: string // What to expect as the next user input
+    canvasAction?: boolean // If true, show canvas button after this response
+    finalReward?: {
+      // Pre-generated image to show after canvas interaction
+      imageUrl: string
+      evaluation: string
+    }
   }[]
 }
 
@@ -1017,18 +1023,26 @@ export const SCRIPTED_BRANCHES: ScriptedBranch[] = [
     steps: [
       {
         response: `Start with his eyes — they're the emotional anchor of this painting. Unlike many of his other self-portraits where anxiety radiates from his gaze, here Van Gogh looks directly at you with unusual calm. This was intentional; he wanted Gauguin to see him as a serene, dedicated artist.`,
-        nextPrompt: `[Prefix: Observational] Looking deeper into that serene expression... What is he thinking? What is he staring at?`,
+        userPrompt: `He is worrying about his friendship with Gauguin.`,
       },
       {
-        response: `[Prefix: Empathy] That's a poignant observation. Their relationship was indeed intense and fragile. What is he worried about?`,
-        nextPrompt: `Continue...`,
+        response: `That's a poignant observation. Their relationship was indeed intense and fragile. What is he worried about?`,
+        userPrompt: `Gauguin doesn't like his style.`,
       },
       {
-        response: `[Prefix: Curiosity] That's a sharp insight into their artistic tension. I'm curious about your perspective... How did you come up with that idea?`,
-        nextPrompt: `One more thought...`,
+        response: `That's a sharp insight into their artistic tension. I'm curious about your perspective... How did you come up with that idea?`,
+        userPrompt: `Because I saw the worries in his eyes.`,
       },
       {
-        response: `[Prefix: Connection] It's incredible how much emotion he could pack into a single gaze. If you could step beyond the frame and reach out to him... If you are in this portrait, how do you want to interact with him?`,
+        response: `It's incredible how much emotion he could pack into a single gaze. If you could step beyond the frame and reach out to him... If you are in this portrait, how do you want to interact with him?`,
+        canvasAction: true,
+      },
+      {
+        response: `Thank you for your beautiful addition. In a world that was often harsh to him, this simple, thoughtful gesture of kindness—giving a single flower—is a profound act of compassion. I believe that for a moment, Vincent truly felt seen and comforted by you.`,
+        finalReward: {
+          imageUrl: `https://images.metmuseum.org/CRDImages/ma/original/299843.jpg`,
+          evaluation: `Your creative collaboration has transformed the moment into something deeply human.`,
+        },
       },
     ],
   },

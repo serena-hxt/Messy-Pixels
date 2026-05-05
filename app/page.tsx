@@ -121,36 +121,51 @@ export default function HomePage() {
 
     const nextStepIndex = scriptedFlow.stepIndex + 1
     if (nextStepIndex >= branch.steps.length) {
-      // Scripted flow complete — exit scripted mode and enable canvas cue
+      // Scripted flow complete — exit scripted mode
       setScriptedFlow(null)
-      setCanvasReadyCue(true)
+      setPendingFollowUps(null)
       return
     }
 
     // Advance to next step in the scripted flow
     const nextStep = branch.steps[nextStepIndex]
+    
+    // Add user message (either the passed question or the scripted prompt)
     const userMsg: UIMessage = {
       id: `synth_user_${Date.now()}`,
       role: "user",
       parts: [{ type: "text", text: question }],
       createdAt: new Date(),
     }
+    
+    // Add assistant response
     const assistantMsg: UIMessage = {
       id: `synth_assistant_${Date.now()}`,
       role: "assistant",
       parts: [{ type: "text", text: nextStep.response }],
       createdAt: new Date(),
     }
+    
     setSyntheticMessages((prev) => [...prev, userMsg, assistantMsg])
     setScriptedFlow({
       ...scriptedFlow,
       stepIndex: nextStepIndex,
     })
     
-    // Set up the next follow-up if available
-    if (nextStep.nextPrompt) {
-      setPendingFollowUps([nextStep.nextPrompt, ""])
-    } else {
+    // If this step has canvas action, show canvas button
+    if (nextStep.canvasAction) {
+      setCanvasReadyCue(true)
+      setPendingFollowUps(null)
+    } 
+    // If there's a pre-set user prompt, auto-trigger it after a delay
+    else if (nextStep.userPrompt) {
+      // Simulate user thinking briefly before auto-advancing
+      setTimeout(() => {
+        handleAskQuestion(nextStep.userPrompt!)
+      }, 800)
+    }
+    // No further action
+    else {
       setPendingFollowUps(null)
     }
   }
@@ -184,6 +199,7 @@ export default function HomePage() {
   const handleCanvasClose = (saved?: { dataUrl: string; note?: string }) => {
     setCanvasOpen(false)
     setCanvasStartWithReference(false)
+    setCanvasReadyCue(false)
     if (!saved) return
     const drawing: SavedDrawing = {
       id: `dwg_${Date.now()}`,
@@ -192,6 +208,63 @@ export default function HomePage() {
       createdAt: Date.now(),
     }
     setDrawings((prev) => [...prev, drawing])
+    
+    // Check if we're in a scripted flow that expects a canvas interaction
+    if (scriptedFlow) {
+      const branch = getScriptedBranch(scriptedFlow.triggerQuestion, scriptedFlow.objectid)
+      if (branch) {
+        const currentStep = branch.steps[scriptedFlow.stepIndex]
+        if (currentStep?.canvasAction) {
+          // Add drawing to chat
+          sendMessage({
+            text: saved.note || "I just made a creative addition to the artwork.",
+          })
+          
+          // Show 2-second thinking animation, then present final reward
+          setTimeout(() => {
+            const nextStepIndex = scriptedFlow.stepIndex + 1
+            if (nextStepIndex < branch.steps.length) {
+              const finalStep = branch.steps[nextStepIndex]
+              if (finalStep?.finalReward) {
+                // Send reward image
+                const imageMsg: UIMessage = {
+                  id: `synth_image_${Date.now()}`,
+                  role: "assistant",
+                  parts: [
+                    {
+                      type: "image",
+                      image: finalStep.finalReward.imageUrl,
+                    } as any,
+                  ],
+                  createdAt: new Date(),
+                }
+                
+                // Send evaluation text
+                const evalMsg: UIMessage = {
+                  id: `synth_eval_${Date.now()}`,
+                  role: "assistant",
+                  parts: [
+                    {
+                      type: "text",
+                      text: finalStep.finalReward.evaluation,
+                    },
+                  ],
+                  createdAt: new Date(),
+                }
+                
+                setSyntheticMessages((prev) => [...prev, imageMsg, evalMsg])
+                setScriptedFlow(null)
+                setPendingFollowUps(null)
+              }
+            }
+          }, 2000)
+          
+          return
+        }
+      }
+    }
+    
+    // Normal canvas submission (not in scripted flow)
     sendMessage({
       text: saved.note
         ? `I just made a quick sketch — ${saved.note}`
@@ -362,9 +435,13 @@ export default function HomePage() {
                   createdAt: new Date(),
                 }
                 setSyntheticMessages((prev) => [...prev, userMsg, assistantMsg])
-                // If there's a next prompt, show it as a follow-up
-                if (scriptedBranch.steps[0].nextPrompt) {
-                  setPendingFollowUps([scriptedBranch.steps[0].nextPrompt, ""])
+                
+                // Auto-trigger the first user prompt after a brief delay (simulating user response)
+                const firstStep = scriptedBranch.steps[0]
+                if (firstStep.userPrompt) {
+                  setTimeout(() => {
+                    handleAskQuestion(firstStep.userPrompt!)
+                  }, 800)
                 }
                 setCurrentArtworkId(artworkId)
                 return
