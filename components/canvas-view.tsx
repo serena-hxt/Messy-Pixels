@@ -405,6 +405,12 @@ export function CanvasView({
     height: number
   } | null>(null)
 
+  // Bumped every time drawReference runs; async onload handlers compare against
+  // it to skip painting if a newer call has already superseded them. Prevents
+  // the duplicated/cropped artwork bug caused by overlapping in-flight image
+  // loads accumulating ctx.scale(dpr, dpr) calls on top of each other.
+  const refDrawGenRef = useRef(0)
+
   const drawReference = useCallback(() => {
     const canvas = refCanvasRef.current
     const container = containerRef.current
@@ -412,6 +418,10 @@ export function CanvasView({
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
+    const gen = ++refDrawGenRef.current
+
+    // Synchronous reset so the canvas doesn't show a stale image while a new
+    // one is loading. The async onload does its own reset before drawing too.
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -422,11 +432,16 @@ export function CanvasView({
     const img = new Image()
     img.crossOrigin = "anonymous"
     img.onload = () => {
+      // Stale callback guard: a newer drawReference() has already started, so
+      // skip this paint to avoid stacking a second copy of the artwork on top
+      // of the correctly fitted one.
+      if (gen !== refDrawGenRef.current) return
+
       const aspect = img.width / img.height
       const containerAspect = rect.width / rect.height
       let drawW: number
       let drawH: number
-      // Maximize artwork scale: 90% height for portrait (aspect < 1), 
+      // Maximize artwork scale: 90% height for portrait (aspect < 1),
       // 100% width for landscape (aspect >= 1)
       if (aspect > containerAspect) {
         // Landscape or square — scale to full width
@@ -446,6 +461,14 @@ export function CanvasView({
         width: drawW / dpr,
         height: drawH / dpr,
       }
+
+      // Reset the transform INSIDE the async callback before re-applying
+      // the dpr scale. Without this, two onloads firing in sequence cause
+      // ctx.scale(dpr, dpr) to multiply the current transform each time,
+      // producing a massively zoomed second copy of the artwork drawn on
+      // top of the correctly fitted one (the visible duplication bug).
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.scale(dpr, dpr)
       ctx.drawImage(img, x, y, drawW, drawH)
     }
