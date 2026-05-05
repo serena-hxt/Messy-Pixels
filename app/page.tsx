@@ -206,56 +206,65 @@ export default function HomePage() {
     }
     setDrawings((prev) => [...prev, drawing])
     
-    // Check if we're in a scripted flow that expects a canvas interaction
+    // Scripted flow — strictly NO Gemini/LLM calls. The user's "I just made
+    // a creative addition…" message is injected as a synthetic user bubble,
+    // then after a 2-second simulated thinking pause Bitsy delivers two
+    // pre-baked replies in chronological order: (1) the hand-and-flower
+    // reward image, (2) the hard-coded evaluation text.
     if (scriptedFlow) {
       const branch = getScriptedBranch(scriptedFlow.triggerQuestion, scriptedFlow.objectid)
       if (branch) {
         const currentStep = branch.steps[scriptedFlow.stepIndex]
         if (currentStep?.canvasAction) {
-          // Add drawing to chat
-          sendMessage({
-            text: saved.note || "I just made a creative addition to the artwork.",
-          })
-          
-          // Show 2-second thinking animation, then present final reward
+          // 1) Synthetic user bubble — exact text per spec when no note is
+          //    provided. We do NOT call sendMessage(), so no API request.
+          const userBubbleText =
+            saved.note?.trim() || "I just made a creative addition to the artwork."
+          const userMsg: UIMessage = {
+            id: `synth_user_${Date.now()}`,
+            role: "user",
+            parts: [{ type: "text", text: userBubbleText }],
+            createdAt: new Date(),
+          }
+          setSyntheticMessages((prev) => [...prev, userMsg])
+
+          // 2) Two-second thinking pause, then deliver the pre-generated
+          //    reward image + evaluation as two sequential Bitsy bubbles.
           setTimeout(() => {
             const nextStepIndex = scriptedFlow.stepIndex + 1
             if (nextStepIndex < branch.steps.length) {
               const finalStep = branch.steps[nextStepIndex]
               if (finalStep?.finalReward) {
-                // Send reward image
+                const baseTs = Date.now()
+                // Image bubble — uses the [scripted_image:URL] marker so the
+                // chat parser renders it as an inline figure (zero API calls).
                 const imageMsg: UIMessage = {
-                  id: `synth_image_${Date.now()}`,
-                  role: "assistant",
-                  parts: [
-                    {
-                      type: "image",
-                      image: finalStep.finalReward.imageUrl,
-                    } as any,
-                  ],
-                  createdAt: new Date(),
-                }
-                
-                // Send evaluation text
-                const evalMsg: UIMessage = {
-                  id: `synth_eval_${Date.now()}`,
+                  id: `synth_image_${baseTs}`,
                   role: "assistant",
                   parts: [
                     {
                       type: "text",
-                      text: finalStep.finalReward.evaluation,
+                      text: `[scripted_image:${finalStep.finalReward.imageUrl}]`,
                     },
                   ],
-                  createdAt: new Date(),
+                  createdAt: new Date(baseTs),
                 }
-                
+                // Evaluation bubble — separate, hard-coded text reply.
+                const evalMsg: UIMessage = {
+                  id: `synth_eval_${baseTs + 1}`,
+                  role: "assistant",
+                  parts: [
+                    { type: "text", text: finalStep.finalReward.evaluation },
+                  ],
+                  createdAt: new Date(baseTs + 1),
+                }
                 setSyntheticMessages((prev) => [...prev, imageMsg, evalMsg])
                 setScriptedFlow(null)
                 setPendingFollowUps(null)
               }
             }
           }, 2000)
-          
+
           return
         }
       }

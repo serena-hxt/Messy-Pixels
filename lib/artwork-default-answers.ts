@@ -1043,10 +1043,12 @@ export const SCRIPTED_BRANCHES: ScriptedBranch[] = [
       },
       {
         // Step 4 — only fired after canvas submission, by handleCanvasClose.
+        // Both the reward image and the evaluation text are pre-generated and
+        // hard-coded; no LLM/Gemini call is made.
         response: `Thank you for your beautiful addition. In a world that was often harsh to him, this simple, thoughtful gesture of kindness—giving a single flower—is a profound act of compassion. I believe that for a moment, Vincent truly felt seen and comforted by you.`,
         finalReward: {
-          imageUrl: `https://images.metmuseum.org/CRDImages/ma/original/299843.jpg`,
-          evaluation: `Your creative collaboration has transformed the moment into something deeply human.`,
+          imageUrl: `/scripted/vangogh-flower-gift.png`,
+          evaluation: `Thank you for your beautiful addition. In a world that was often harsh to him, this simple, thoughtful gesture of kindness—giving a single flower—is a profound act of compassion. I believe that for a moment, Vincent truly felt seen and comforted by you.`,
         },
       },
     ],

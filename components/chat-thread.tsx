@@ -15,6 +15,12 @@ import { useSelectedArtwork, type Artwork } from "@/contexts/selected-artwork-co
 // visual card. The artist segment is optional — `[artwork:Geraniums]` is also valid.
 const ARTWORK_MARKER_RE = /\[artwork:\s*([^|\]]+?)\s*(?:\|\s*([^\]]+?)\s*)?\]/gi
 
+// Scripted-flow reward marker. Hard-coded conversation branches embed
+// [scripted_image:/path/to.png] in an assistant text part to render a
+// pre-generated image inline as if it were an additional message. This
+// avoids any LLM / multi-modal pipeline and keeps everything synthetic.
+const SCRIPTED_IMAGE_MARKER_RE = /\[scripted_image:\s*([^\]]+?)\s*\]/gi
+
 interface ArtworkRef {
   title: string
   artist?: string
@@ -27,6 +33,8 @@ interface ParsedAssistantMessage {
   visible: string
   /** Artwork references extracted from `[artwork:...]` markers, in order. */
   artworks: ArtworkRef[]
+  /** Pre-generated reward image URLs from `[scripted_image:URL]` markers. */
+  scriptedImages: string[]
 }
 
 function parseAssistantMessage(text: string): ParsedAssistantMessage {
@@ -34,6 +42,7 @@ function parseAssistantMessage(text: string): ParsedAssistantMessage {
   const withoutDraw = text.replace(/\[draw_now\]/gi, "")
 
   const artworks: ArtworkRef[] = []
+  const scriptedImages: string[] = []
   let occurrence = 0
   const visible = withoutDraw
     .replace(ARTWORK_MARKER_RE, (_full, rawTitle: string, rawArtist?: string) => {
@@ -44,9 +53,14 @@ function parseAssistantMessage(text: string): ParsedAssistantMessage {
       }
       return ""
     })
+    .replace(SCRIPTED_IMAGE_MARKER_RE, (_full, rawUrl: string) => {
+      const url = rawUrl.trim()
+      if (url) scriptedImages.push(url)
+      return ""
+    })
     .trim()
 
-  return { visible, artworks }
+  return { visible, artworks, scriptedImages }
 }
 
 /** Plain-text version used by the follow-up question API and other consumers. */
@@ -58,6 +72,7 @@ function getMessageText(msg: UIMessage): string {
     .join("")
     .replace(/\[draw_now\]/gi, "")
     .replace(ARTWORK_MARKER_RE, "")
+    .replace(SCRIPTED_IMAGE_MARKER_RE, "")
     .trim()
   return raw
 }
@@ -405,11 +420,22 @@ type Item =
               .map((p) => p.text)
               .join("")
             const parsed = isUser
-              ? { visible: rawText.replace(/\[draw_now\]/gi, "").trim(), artworks: [] as ArtworkRef[] }
+              ? {
+                  visible: rawText.replace(/\[draw_now\]/gi, "").trim(),
+                  artworks: [] as ArtworkRef[],
+                  scriptedImages: [] as string[],
+                }
               : parseAssistantMessage(rawText)
 
-            // Skip empty bubbles, but keep the row if there are artwork cards to show.
-            if (!parsed.visible && parsed.artworks.length === 0) return null
+            // Skip empty bubbles, but keep the row if there are artwork cards
+            // OR a scripted reward image to show.
+            if (
+              !parsed.visible &&
+              parsed.artworks.length === 0 &&
+              parsed.scriptedImages.length === 0
+            ) {
+              return null
+            }
 
             const isSynthetic = !isUser && isSyntheticAssistantId(m.id)
             const isStreaming = isSynthetic && !completedSynthetic.has(m.id)
@@ -474,6 +500,36 @@ type Item =
                         onSelect={handleArtworkSelect}
                         onEditOnArtwork={onEditOnArtwork}
                       />
+                    ))}
+                  </div>
+                )}
+
+                {/* Scripted reward image — pre-generated artwork delivered
+                    as its own chronological assistant message during the
+                    Van Gogh hand-and-flower finale. Rendered with
+                    object-contain so the artwork keeps its true aspect ratio. */}
+                {parsed.scriptedImages.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {parsed.scriptedImages.map((url, idx) => (
+                      <figure
+                        key={`${m.id}-rwd-${idx}`}
+                        className="max-w-[88%] self-start overflow-hidden rounded-[20px] rounded-bl-[6px] bg-background/75 p-2 backdrop-blur-xl"
+                        style={{
+                          border: "0.75px solid rgba(26,26,31,0.14)",
+                          boxShadow: "0 12px 30px -16px rgba(60, 70, 90, 0.22)",
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url || "/placeholder.svg"}
+                          alt="Your collaborative addition to Van Gogh's self-portrait"
+                          className="block w-full rounded-[14px] object-contain"
+                          style={{
+                            maxHeight: "60vh",
+                            background: "rgba(26,26,31,0.04)",
+                          }}
+                        />
+                      </figure>
                     ))}
                   </div>
                 )}
