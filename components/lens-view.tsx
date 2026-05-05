@@ -42,7 +42,9 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
   const streamRef = useRef<MediaStream | null>(null)
   const scanningRef = useRef(false)
 
-  const { setArtwork } = useSelectedArtwork()
+  // The context exposes `setSelectedArtwork`; alias it as `setArtwork`
+  // for the local effect below (keeps the existing call sites unchanged).
+  const { setSelectedArtwork: setArtwork } = useSelectedArtwork()
 
   const [facing, setFacing] = useState<"environment" | "user">("environment")
   const [danmakuOn, setDanmakuOn] = useState(true)
