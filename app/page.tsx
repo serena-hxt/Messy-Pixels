@@ -19,7 +19,7 @@ import { MakerQuiz } from "@/components/maker-quiz"
 import { HomeAlbumView } from "@/components/home-album-view"
 import { deriveSessionTitle, upsertSession, type ChatSession } from "@/lib/storage"
 import { useSelectedArtwork, type Artwork } from "@/contexts/selected-artwork-context"
-import { findDefaultAnswer } from "@/lib/artwork-default-answers"
+import { findDefaultAnswer, getScriptedBranch } from "@/lib/artwork-default-answers"
 import type { UIMessage } from "ai"
 
 export interface SavedDrawing {
@@ -44,6 +44,14 @@ export default function HomePage() {
   const [pendingFollowUps, setPendingFollowUps] = useState<[string, string] | null>(null)
   // Current artwork ID for follow-up context
   const [currentArtworkId, setCurrentArtworkId] = useState<number | null>(null)
+  // Scripted branch tracking — when in a scripted flow, this stores step index and branch
+  const [scriptedFlow, setScriptedFlow] = useState<{
+    objectid: number
+    stepIndex: number
+    triggerQuestion: string
+  } | null>(null)
+  // Visual cue for canvas: pulses when scripted flow completes
+  const [canvasReadyCue, setCanvasReadyCue] = useState(false)
   const { selectedArtwork, setSelectedArtwork } = useSelectedArtwork()
   const lastTriggeredMessageIdRef = useRef<string | null>(null)
   const canvasCloseRef = useRef<(() => void) | null>(null)
@@ -95,6 +103,58 @@ export default function HomePage() {
     setInput("")
   }
 
+  // Handle follow-up question clicks — check if we're in a scripted flow
+  const handleAskQuestion = (question: string) => {
+    if (!scriptedFlow) {
+      // Not in a scripted flow — send normally
+      sendMessage({ text: question })
+      return
+    }
+
+    // In a scripted flow — check if we can advance to the next step
+    const branch = getScriptedBranch(scriptedFlow.triggerQuestion, scriptedFlow.objectid)
+    if (!branch) {
+      // Scripted branch not found (shouldn't happen), fall back to normal
+      sendMessage({ text: question })
+      return
+    }
+
+    const nextStepIndex = scriptedFlow.stepIndex + 1
+    if (nextStepIndex >= branch.steps.length) {
+      // Scripted flow complete — exit scripted mode and enable canvas cue
+      setScriptedFlow(null)
+      setCanvasReadyCue(true)
+      return
+    }
+
+    // Advance to next step in the scripted flow
+    const nextStep = branch.steps[nextStepIndex]
+    const userMsg: UIMessage = {
+      id: `synth_user_${Date.now()}`,
+      role: "user",
+      parts: [{ type: "text", text: question }],
+      createdAt: new Date(),
+    }
+    const assistantMsg: UIMessage = {
+      id: `synth_assistant_${Date.now()}`,
+      role: "assistant",
+      parts: [{ type: "text", text: nextStep.response }],
+      createdAt: new Date(),
+    }
+    setSyntheticMessages((prev) => [...prev, userMsg, assistantMsg])
+    setScriptedFlow({
+      ...scriptedFlow,
+      stepIndex: nextStepIndex,
+    })
+    
+    // Set up the next follow-up if available
+    if (nextStep.nextPrompt) {
+      setPendingFollowUps([nextStep.nextPrompt, ""])
+    } else {
+      setPendingFollowUps(null)
+    }
+  }
+
   const hasConversation = messages.length > 0 || syntheticMessages.length > 0 || drawings.length > 0
 
   const isDiscussingArtwork = messages.some((m) => {
@@ -118,6 +178,7 @@ export default function HomePage() {
     setSelectedArtwork(artwork)
     setCanvasStartWithReference(true)
     setCanvasOpen(true)
+    setCanvasReadyCue(false)
   }
 
   const handleCanvasClose = (saved?: { dataUrl: string; note?: string }) => {
@@ -214,7 +275,13 @@ export default function HomePage() {
                     error={error}
                     followUpQuestions={pendingFollowUps}
                     onAsk={(question) => {
-                      // Check if this is a follow-up question
+                      // First check: are we in a scripted flow?
+                      if (scriptedFlow) {
+                        handleAskQuestion(question)
+                        return
+                      }
+                      
+                      // Second check: is this a follow-up to a default answer?
                       if (currentArtworkId) {
                         const defaultQA = findDefaultAnswer(question, currentArtworkId)
                         if (defaultQA) {
@@ -235,7 +302,7 @@ export default function HomePage() {
                           return
                         }
                       }
-                      // No default — call the AI
+                      // No default or scripted — call the AI
                       sendMessage({ text: question })
                       setPendingFollowUps(null)
                     }}
@@ -255,8 +322,10 @@ export default function HomePage() {
                       setCanvasStartWithReference(true)
                     }
                     setCanvasOpen(true)
+                    setCanvasReadyCue(false)
                   }}
                   status={status}
+                  canvasReadyCue={canvasReadyCue}
                 />
               </motion.section>
             )}
@@ -270,7 +339,38 @@ export default function HomePage() {
             onClose={() => setLensOpen(false)}
             onAskAI={(question, artworkId) => {
               setLensOpen(false)
-              // Check for pre-written default answer
+              
+              // Check for scripted branch first (hard-coded guided experience)
+              const scriptedBranch = getScriptedBranch(question, artworkId)
+              if (scriptedBranch) {
+                setScriptedFlow({
+                  objectid: artworkId,
+                  stepIndex: 0,
+                  triggerQuestion: question,
+                })
+                // Inject the initial question and first scripted response
+                const userMsg: UIMessage = {
+                  id: `synth_user_${Date.now()}`,
+                  role: "user",
+                  parts: [{ type: "text", text: question }],
+                  createdAt: new Date(),
+                }
+                const assistantMsg: UIMessage = {
+                  id: `synth_assistant_${Date.now()}`,
+                  role: "assistant",
+                  parts: [{ type: "text", text: scriptedBranch.steps[0].response }],
+                  createdAt: new Date(),
+                }
+                setSyntheticMessages((prev) => [...prev, userMsg, assistantMsg])
+                // If there's a next prompt, show it as a follow-up
+                if (scriptedBranch.steps[0].nextPrompt) {
+                  setPendingFollowUps([scriptedBranch.steps[0].nextPrompt, ""])
+                }
+                setCurrentArtworkId(artworkId)
+                return
+              }
+              
+              // Fall back to default answers (pre-written but not scripted)
               const defaultQA = findDefaultAnswer(question, artworkId)
               if (defaultQA) {
                 // Inject synthetic user + assistant messages (no API call)

@@ -18,6 +18,20 @@ export interface ArtworkDefaults {
   answers: DefaultAnswer[]
 }
 
+/**
+ * Scripted conversation branch — a hard-coded sequence that plays automatically
+ * without calling the LLM API. Used for specific artworks that warrant guided
+ * narrative experiences.
+ */
+export interface ScriptedBranch {
+  triggerId: string // The question that triggers this branch
+  objectid: number
+  steps: {
+    response: string
+    nextPrompt?: string // Prompt to show after this response
+  }[]
+}
+
 export const ARTWORK_DEFAULT_ANSWERS: ArtworkDefaults[] = [
   {
     objectid: 299843,
@@ -933,7 +947,7 @@ Finally, look for the geometry. Her face is simplified into planes. The chair is
       // Follow-up answers for Cézanne
       {
         question: "Why did Cézanne paint Hortense so many times?",
-        answer: `Hortense's face was an inexhaustible problem for Cézanne. She represented a challenge: how to reduce a human face to its essential geometry while maintaining its presence as a living, breathing being.
+        answer: `Hortense's face was an inexhaustible problem for C��zanne. She represented a challenge: how to reduce a human face to its essential geometry while maintaining its presence as a living, breathing being.
 
 Each portrait tackled the problem differently. In some versions, her face is almost mask-like; in others, more naturalistic. Some show her looking at us; others have her gaze averted. Cézanne was experimenting, iterating, trying to find the solution to representing form and structure.
 
@@ -992,8 +1006,50 @@ There's also philosophical content: Hortense, sitting in her red armchair, is no
 ]
 
 /**
- * Look up the default answers for a given artwork by its HAM Object ID.
+ * Hard-coded scripted conversation branches for specific artworks.
+ * These play automatically without LLM calls, guiding users through
+ * curated narrative experiences designed to deepen art appreciation.
  */
+export const SCRIPTED_BRANCHES: ScriptedBranch[] = [
+  {
+    triggerId: `If I were standing in front of "Self-Portrait Dedicated to Paul Gauguin", what details should I look for first?`,
+    objectid: 299843,
+    steps: [
+      {
+        response: `Start with his eyes — they're the emotional anchor of this painting. Unlike many of his other self-portraits where anxiety radiates from his gaze, here Van Gogh looks directly at you with unusual calm. This was intentional; he wanted Gauguin to see him as a serene, dedicated artist.`,
+        nextPrompt: `[Prefix: Observational] Looking deeper into that serene expression... What is he thinking? What is he staring at?`,
+      },
+      {
+        response: `[Prefix: Empathy] That's a poignant observation. Their relationship was indeed intense and fragile. What is he worried about?`,
+        nextPrompt: `Continue...`,
+      },
+      {
+        response: `[Prefix: Curiosity] That's a sharp insight into their artistic tension. I'm curious about your perspective... How did you come up with that idea?`,
+        nextPrompt: `One more thought...`,
+      },
+      {
+        response: `[Prefix: Connection] It's incredible how much emotion he could pack into a single gaze. If you could step beyond the frame and reach out to him... If you are in this portrait, how do you want to interact with him?`,
+      },
+    ],
+  },
+]
+
+/**
+ * Look up a scripted branch by the trigger question and artwork ID.
+ */
+export function getScriptedBranch(
+  question: string,
+  objectid: number,
+): ScriptedBranch | null {
+  const normalized = question.toLowerCase().trim()
+  return (
+    SCRIPTED_BRANCHES.find(
+      (b) =>
+        b.objectid === objectid &&
+        b.triggerId.toLowerCase().trim() === normalized,
+    ) ?? null
+  )
+}
 export function getArtworkDefaults(objectid: number): ArtworkDefaults | null {
   return ARTWORK_DEFAULT_ANSWERS.find((a) => a.objectid === objectid) ?? null
 }

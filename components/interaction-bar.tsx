@@ -11,6 +11,7 @@ interface InteractionBarProps {
   onAlbum: () => void
   onCanvas: () => void
   status: "submitted" | "streaming" | "ready" | "error"
+  canvasReadyCue?: boolean
 }
 
 export function InteractionBar({
@@ -21,6 +22,7 @@ export function InteractionBar({
   onAlbum,
   onCanvas,
   status,
+  canvasReadyCue,
 }: InteractionBarProps) {
   const isBusy = status === "submitted" || status === "streaming"
   const canSend = input.trim().length > 0 && !isBusy
@@ -94,7 +96,16 @@ export function InteractionBar({
               type="button"
               onClick={onCanvas}
               aria-label="Edit image on canvas"
-              className="rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring relative"
+              style={
+                canvasReadyCue
+                  ? {
+                      color: "rgba(26,26,31,0.9)",
+                      animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+                      boxShadow: "0 0 16px rgba(26,26,31,0.3), inset 0 0 8px rgba(26,26,31,0.1)",
+                    }
+                  : {}
+              }
             >
               <ImagePlus className="h-[20px] w-[20px]" strokeWidth={1.5} aria-hidden="true" />
             </button>
