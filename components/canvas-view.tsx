@@ -3,6 +3,7 @@
 import type React from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
+  BookOpen,
   Brush,
   ChevronDown,
   Eye,
@@ -22,6 +23,7 @@ import {
 import { useSelectedArtwork } from "@/contexts/selected-artwork-context"
 import { loadMakerProfile, MAKER_PROFILE_INFO, type MakerProfileType } from "@/lib/storage"
 import { getPromptForProfile, shufflePrompt, FREE_CREATE_PROMPT, type CreativePrompt } from "@/lib/prompts"
+import { CURATED_ARTWORKS, type CuratedArtwork } from "@/lib/curated-artworks"
 
 /* -------------------------------------------------------------------------- */
 /* Types & Constants                                                           */
@@ -286,6 +288,16 @@ export function CanvasView({
   )
   const [referenceOpacity, setReferenceOpacity] = useState<number>(0.35)
 
+  // Per-layer "has content" tracking — used by the album to find the next
+  // empty layer to drop a popular work onto. Strokes also flip the bit on
+  // pointer-down so a hand-drawn layer is treated as occupied.
+  const [layerHasContent, setLayerHasContent] = useState<boolean[]>(() =>
+    Array(MAX_LAYERS).fill(false),
+  )
+
+  // Album picker — floating popup at bottom-left of the canvas.
+  const [albumOpen, setAlbumOpen] = useState(false)
+
   // Sync brush + palette when a new artwork is selected mid-session.
   const lastArtworkIdRef = useRef<number | null>(null)
   useEffect(() => {
@@ -480,6 +492,13 @@ export function CanvasView({
     if (!layers[idx]?.visible) return // can't draw on a hidden layer
     canvas.setPointerCapture?.(e.pointerId)
     drawingRef.current = true
+    // Mark this layer as occupied so the album skips it when picking next slot.
+    setLayerHasContent((prev) => {
+      if (prev[idx]) return prev
+      const next = [...prev]
+      next[idx] = true
+      return next
+    })
     const pt = getPoint(e)
     lastPtRef.current = pt
 
@@ -523,6 +542,12 @@ export function CanvasView({
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.restore()
+    setLayerHasContent((prev) => {
+      if (!prev[idx]) return prev
+      const next = [...prev]
+      next[idx] = false
+      return next
+    })
     refreshHasInk()
   }
 
@@ -531,6 +556,79 @@ export function CanvasView({
       prev.map((l, i) => (i === idx ? { ...l, visible: !l.visible } : l)),
     )
   }
+
+  /* ---------------- Album: drop a curated artwork onto a layer ---------------- */
+
+  const addArtworkToLayer = useCallback(
+    (artwork: CuratedArtwork) => {
+      const container = containerRef.current
+      if (!container) return
+      const url = artwork.fallbackImageUrl
+      if (!url) return // album shows only artworks with a usable image URL
+
+      // Pick the first empty layer; if all are taken, fall back to the active one.
+      const emptyIdx = layerHasContent.findIndex((v) => !v)
+      const targetIdx = emptyIdx >= 0 ? emptyIdx : activeLayerRef.current
+      const canvas = layerRefs.current[targetIdx]
+      if (!canvas) return
+
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return
+
+      const rect = container.getBoundingClientRect()
+      const dpr = window.devicePixelRatio || 1
+
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      img.onload = () => {
+        // Clear the target layer, then draw the image with object-contain fit.
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.scale(dpr, dpr)
+
+        // Inset slightly so the placed work feels like a sticker on the canvas.
+        const padding = 24
+        const availW = Math.max(1, rect.width - padding * 2)
+        const availH = Math.max(1, rect.height - padding * 2)
+        const aspect = img.width / img.height
+        const containerAspect = availW / availH
+        let drawW: number
+        let drawH: number
+        if (aspect > containerAspect) {
+          drawW = availW
+          drawH = availW / aspect
+        } else {
+          drawH = availH
+          drawW = availH * aspect
+        }
+        const x = (rect.width - drawW) / 2
+        const y = (rect.height - drawH) / 2
+        ctx.drawImage(img, x, y, drawW, drawH)
+        ctx.restore()
+
+        // Mark layer as occupied, make it active, and ensure it's visible.
+        setLayerHasContent((prev) => {
+          if (prev[targetIdx]) return prev
+          const next = [...prev]
+          next[targetIdx] = true
+          return next
+        })
+        setLayers((prev) =>
+          prev.map((l, i) => (i === targetIdx && !l.visible ? { ...l, visible: true } : l)),
+        )
+        setActiveLayer(targetIdx)
+        setHasInk(true)
+        setAlbumOpen(false)
+      }
+      img.onerror = () => {
+        // Image blocked or failed — close the album quietly, no crash.
+        setAlbumOpen(false)
+      }
+      img.src = url
+    },
+    [layerHasContent],
+  )
 
   const refreshHasInk = () => {
     // Quick check: any layer canvas has non-empty pixels? Cheap heuristic — assume cleared.
@@ -755,6 +853,93 @@ export function CanvasView({
             <p className="pointer-events-none absolute bottom-5 right-5 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/30">
               tap & drag to sketch
             </p>
+          )}
+
+          {/* Floating Album button — bottom-left of the canvas */}
+          {mode === "draw" && (
+            <div className="absolute bottom-4 left-4 z-20">
+              {/* Popup panel — appears above the button when open */}
+              {albumOpen && (
+                <div
+                  className="mb-3 w-[260px] sm:w-[300px] rounded-2xl p-3"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.85)",
+                    backdropFilter: "blur(20px) saturate(140%)",
+                    WebkitBackdropFilter: "blur(20px) saturate(140%)",
+                    border: "0.5px solid rgba(26,26,31,0.12)",
+                    boxShadow: "0 18px 40px -16px rgba(60,70,90,0.28)",
+                  }}
+                >
+                  <div className="mb-2 flex items-center justify-between px-1">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/55">
+                      popular works
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setAlbumOpen(false)}
+                      className="rounded-full p-1 text-foreground/45 transition-colors hover:text-foreground/80"
+                      aria-label="Close album"
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </button>
+                  </div>
+
+                  <div
+                    className="grid grid-cols-3 gap-2 overflow-y-auto pr-1"
+                    style={{ maxHeight: "220px" }}
+                  >
+                    {CURATED_ARTWORKS.filter((a) => Boolean(a.fallbackImageUrl)).map((artwork) => (
+                      <button
+                        key={artwork.objectid}
+                        type="button"
+                        onClick={() => addArtworkToLayer(artwork)}
+                        className="group flex flex-col items-stretch gap-1 rounded-xl p-1 text-left transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
+                        aria-label={`Add ${artwork.title} by ${artwork.artist} as a new layer`}
+                      >
+                        <div
+                          className="aspect-square w-full overflow-hidden rounded-md bg-foreground/5"
+                          style={{ border: "0.5px solid rgba(26,26,31,0.1)" }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={artwork.fallbackImageUrl}
+                            alt=""
+                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                            loading="lazy"
+                            draggable={false}
+                          />
+                        </div>
+                        <p className="line-clamp-2 px-0.5 font-mono text-[9px] leading-tight text-foreground/65">
+                          {artwork.artist}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="mt-2 px-1 font-mono text-[9px] uppercase tracking-[0.18em] text-foreground/40">
+                    tap to add as a new layer
+                  </p>
+                </div>
+              )}
+
+              {/* Album toggle button */}
+              <button
+                type="button"
+                onClick={() => setAlbumOpen((v) => !v)}
+                aria-label="Open album of popular works"
+                aria-expanded={albumOpen}
+                className="flex h-12 w-12 items-center justify-center rounded-full transition-all"
+                style={{
+                  background: "linear-gradient(145deg, #ffffff, #eef0f4)",
+                  boxShadow: albumOpen
+                    ? "inset 3px 3px 7px #d1d9e6, inset -3px -3px 7px #ffffff"
+                    : "4px 4px 10px rgba(209,217,230,0.9), -4px -4px 10px rgba(255,255,255,0.95)",
+                  border: albumOpen ? "1.5px solid rgba(26,26,31,0.4)" : "0.5px solid rgba(26,26,31,0.08)",
+                }}
+              >
+                <BookOpen className="h-5 w-5 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
+              </button>
+            </div>
           )}
         </div>
       </div>
