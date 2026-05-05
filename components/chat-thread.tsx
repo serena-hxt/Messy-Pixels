@@ -219,6 +219,13 @@ type Item =
   }: ChatThreadProps) {
   const scrollRef = useRef<HTMLElement | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
+
+  // Remembers each drawing's "anchor index" — the messages.length at the
+  // moment we first observed it. This freezes the drawing's position in the
+  // chronological timeline so later assistant messages (e.g. the scripted
+  // hand-and-flower reward + evaluation that arrive 5 seconds afterward)
+  // appear BELOW the drawing instead of being pushed above it.
+  const drawingAnchorRef = useRef<Map<string, number>>(new Map())
   const userScrolledUpRef = useRef(false)
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([])
   const [detailArtwork, setDetailArtwork] = useState<Artwork | null>(null)
@@ -322,13 +329,23 @@ type Item =
   }
 
   // Interleave messages and drawings chronologically.
+  // Messages get integer indices (0, 1, 2…). Each drawing remembers the
+  // messages.length at the time it was first added — that anchor + 0.5
+  // places it directly AFTER the message it followed in real time, and
+  // crucially BEFORE any messages that arrive later (such as the scripted
+  // 5-second-delayed reward image + evaluation).
   const items: Item[] = []
   messages.forEach((m, i) => {
     items.push({ kind: "msg", key: m.id, t: i, node: m })
   })
   drawings.forEach((d) => {
-    // Ensure drawings are sorted after all messages chronologically
-    items.push({ kind: "drawing", key: d.id, t: messages.length + d.createdAt / 1e10, node: d })
+    if (!drawingAnchorRef.current.has(d.id)) {
+      drawingAnchorRef.current.set(d.id, messages.length)
+    }
+    const anchor = drawingAnchorRef.current.get(d.id)!
+    // +0.5 keeps it strictly between message[anchor-1] and message[anchor];
+    // d.createdAt/1e13 disambiguates two drawings created back-to-back.
+    items.push({ kind: "drawing", key: d.id, t: anchor + 0.5 + d.createdAt / 1e13, node: d })
   })
   // Stable sort: preserves order for equal timestamps
   items.sort((a, b) => a.t - b.t)
