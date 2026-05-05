@@ -389,8 +389,25 @@ export async function findBestMatch(input: {
     const curated = findCuratedMatch({ title, artist })
     if (curated) {
       try {
-        return await fetchArtworkById(curated.objectid)
+        const artwork = await fetchArtworkById(curated.objectid)
+        // If HAM returns an artwork without a valid image, use the fallback if available
+        if (!artwork.primaryimageurl && curated.fallbackImageUrl) {
+          artwork.primaryimageurl = curated.fallbackImageUrl
+        }
+        return artwork
       } catch {
+        // If HAM fetch fails entirely, create a synthetic artwork using the fallback
+        if (curated.fallbackImageUrl) {
+          return {
+            id: curated.objectid,
+            title: curated.title,
+            artist: curated.artist,
+            primaryimageurl: curated.fallbackImageUrl,
+            commentary: "",
+            colors: [],
+            medium: "",
+          }
+        }
         /* fall through to fuzzy search */
       }
     }
