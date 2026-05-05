@@ -47,7 +47,7 @@ export function AlbumSheet({
   onSelectArtwork,
   onPickLocalImage,
 }: AlbumSheetProps) {
-  const [tab, setTab] = useState<Tab>("recognized")
+  const [tab, setTab] = useState<Tab>("popular")
   const [localImages, setLocalImages] = useState<string[]>([])
   const [animatingOut, setAnimatingOut] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -114,7 +114,7 @@ export function AlbumSheet({
         {/* Tabs */}
         <div className="px-6 pt-4">
           <div className="flex gap-1 rounded-full border border-white/10 bg-white/5 p-1">
-            {(["recognized", "popular", "local"] as Tab[]).map((t) => (
+            {(["popular", "recognized", "local"] as Tab[]).map((t) => (
               <button
                 key={t}
                 type="button"
