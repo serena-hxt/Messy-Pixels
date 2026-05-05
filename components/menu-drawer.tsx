@@ -1,10 +1,10 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ImageIcon, MessageSquare, PenLine, Trash2, X } from "lucide-react"
-import { loadProfile, loadSessions, saveSessions, type ChatSession, type UserProfile } from "@/lib/storage"
+import { Camera, ImageIcon, MessageSquare, PenLine, Sparkles, Trash2, X } from "lucide-react"
+import { loadProfile, loadSessions, saveSessions, loadMakerProfile, MAKER_PROFILE_INFO, type ChatSession, type UserProfile, type MakerProfile } from "@/lib/storage"
 
-export type MenuDestination = "profile" | "gallery" | "new-chat"
+export type MenuDestination = "profile" | "gallery" | "new-chat" | "quiz" | "lens"
 
 interface MenuDrawerProps {
   open: boolean
@@ -18,12 +18,14 @@ interface MenuDrawerProps {
 
 export function MenuDrawer({ open, onClose, onNavigate, activeSessionId, onOpenSession }: MenuDrawerProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [makerProfile, setMakerProfile] = useState<MakerProfile | null>(null)
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [closing, setClosing] = useState(false)
 
   useEffect(() => {
     if (open) {
       setProfile(loadProfile())
+      setMakerProfile(loadMakerProfile())
       setSessions(loadSessions())
     }
   }, [open])
@@ -135,8 +137,56 @@ export function MenuDrawer({ open, onClose, onNavigate, activeSessionId, onOpenS
         {/* Hairline */}
         <div className="mx-5 mt-5 h-px shrink-0 bg-foreground/10" aria-hidden="true" />
 
-        {/* Primary actions: New Chat + Gallery */}
+        {/* Maker Profile Badge */}
+        <div className="mx-5 mt-4 shrink-0">
+          {makerProfile ? (
+            <div
+              className="flex items-center gap-3 rounded-2xl px-4 py-3"
+              style={{
+                background: "linear-gradient(135deg, rgba(170,196,176,0.25), rgba(212,166,156,0.25))",
+                border: "0.75px solid rgba(26,26,31,0.1)",
+              }}
+            >
+              <Sparkles className="h-4 w-4 shrink-0 text-foreground/60" strokeWidth={1.5} />
+              <div className="min-w-0 flex-1">
+                <p className="font-mono text-[12px] font-normal text-foreground">
+                  You are a {MAKER_PROFILE_INFO[makerProfile.type].name}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleNav("quiz")}
+                  className="font-mono text-[10px] text-foreground/50 hover:text-foreground/80 transition-colors"
+                >
+                  Retake Quiz
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleNav("quiz")}
+              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors hover:bg-foreground/5"
+              style={{
+                border: "0.75px dashed rgba(26,26,31,0.2)",
+              }}
+            >
+              <Sparkles className="h-4 w-4 shrink-0 text-foreground/50" strokeWidth={1.5} />
+              <div className="min-w-0 flex-1">
+                <p className="font-mono text-[12px] font-normal text-foreground/75">No Maker Profile yet</p>
+                <p className="font-mono text-[10px] text-foreground/50">Take the quick quiz</p>
+              </div>
+            </button>
+          )}
+        </div>
+
+        {/* Primary actions */}
         <nav className="mt-3 shrink-0 flex flex-col gap-1 px-3">
+          <ActionItem
+            icon={<Camera className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+            label="Start My Visit"
+            hint={makerProfile ? "scan or select artwork" : "build your maker profile first"}
+            onClick={() => handleNav(makerProfile ? "lens" : "quiz")}
+          />
           <ActionItem
             icon={<PenLine className="h-[18px] w-[18px]" strokeWidth={1.5} />}
             label="New chat"

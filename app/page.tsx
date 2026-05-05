@@ -15,6 +15,7 @@ import { CanvasView } from "@/components/canvas-view"
 import { MenuDrawer, type MenuDestination } from "@/components/menu-drawer"
 import { ProfileView } from "@/components/profile-view"
 import { GalleryView } from "@/components/gallery-view"
+import { MakerQuiz } from "@/components/maker-quiz"
 import { deriveSessionTitle, upsertSession, type ChatSession } from "@/lib/storage"
 import { useSelectedArtwork, type Artwork } from "@/contexts/selected-artwork-context"
 import { findDefaultAnswer } from "@/lib/artwork-default-answers"
@@ -306,6 +307,8 @@ export default function HomePage() {
               sessionIdRef.current = null
               sessionStartedRef.current = null
               window.location.reload()
+            } else if (dest === "lens") {
+              setLensOpen(true)
             } else {
               setActiveView(dest)
             }
@@ -317,6 +320,15 @@ export default function HomePage() {
         )}
         {activeView === "gallery" && (
           <GalleryView onClose={() => setActiveView(null)} drawings={drawings} />
+        )}
+        {activeView === "quiz" && (
+          <MakerQuiz
+            onComplete={() => {
+              setActiveView(null)
+              setLensOpen(true)
+            }}
+            onBack={() => setActiveView(null)}
+          />
         )}
       </div>
     </div>

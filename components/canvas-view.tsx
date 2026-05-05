@@ -4,18 +4,24 @@ import type React from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Brush,
+  ChevronDown,
   Eye,
   EyeOff,
   ImageIcon,
   Layers,
   Pencil,
   PenLine,
+  RefreshCw,
+  Shuffle,
   Trash2,
   Type,
   Sparkles,
   Droplets,
+  X,
 } from "lucide-react"
 import { useSelectedArtwork } from "@/contexts/selected-artwork-context"
+import { loadMakerProfile, MAKER_PROFILE_INFO, type MakerProfileType } from "@/lib/storage"
+import { getPromptForProfile, shufflePrompt, FREE_CREATE_PROMPT, type CreativePrompt } from "@/lib/prompts"
 
 /* -------------------------------------------------------------------------- */
 /* Types & Constants                                                           */
@@ -256,6 +262,21 @@ export function CanvasView({
   const [brushTransparency, setBrushTransparency] = useState<number>(100)
   const [note, setNote] = useState<string>("")
   const [hasInk, setHasInk] = useState(false)
+
+  // Prompt state — personalized based on maker profile
+  const [makerProfile, setMakerProfile] = useState<MakerProfileType | null>(null)
+  const [currentPrompt, setCurrentPrompt] = useState<CreativePrompt | null>(null)
+  const [promptVisible, setPromptVisible] = useState(true)
+  const [showProfilePicker, setShowProfilePicker] = useState(false)
+
+  // Initialize prompt from maker profile on mount
+  useEffect(() => {
+    const profile = loadMakerProfile()
+    if (profile) {
+      setMakerProfile(profile.type)
+      setCurrentPrompt(getPromptForProfile(profile.type))
+    }
+  }, [])
 
   // Layer state — five user layers, plus a reference overlay flag.
   const [layers, setLayers] = useState<LayerState[]>(INITIAL_LAYERS)
@@ -572,11 +593,119 @@ export function CanvasView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Contextual prompt */}
+      {/* Contextual prompt with controls */}
       <div className="px-4 pt-2 sm:px-8 md:px-12">
-        <p className="font-mono text-[12px] font-light leading-relaxed text-foreground/75">{prompt}</p>
+        {promptVisible && currentPrompt ? (
+          <div
+            className="relative rounded-2xl px-4 py-3"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.55)",
+              backdropFilter: "blur(20px) saturate(140%)",
+              WebkitBackdropFilter: "blur(20px) saturate(140%)",
+              border: "0.5px solid rgba(26,26,31,0.1)",
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-foreground/50" strokeWidth={1.5} />
+              <div className="min-w-0 flex-1">
+                <p className="font-mono text-[12px] font-light leading-relaxed text-foreground/80">
+                  {currentPrompt.text}
+                </p>
+                <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-foreground/40">
+                  {MAKER_PROFILE_INFO[currentPrompt.profile].name} prompt
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPromptVisible(false)}
+                className="shrink-0 rounded-full p-1 text-foreground/40 hover:text-foreground/70 transition-colors"
+                aria-label="Hide prompt"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+              </button>
+            </div>
+
+            {/* Prompt controls */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (makerProfile) {
+                    setCurrentPrompt(shufflePrompt(makerProfile, currentPrompt.text))
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground/60 hover:text-foreground transition-colors"
+                style={{ border: "0.5px solid rgba(26,26,31,0.15)" }}
+              >
+                <Shuffle className="h-3 w-3" strokeWidth={1.5} />
+                Shuffle
+              </button>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowProfilePicker(!showProfilePicker)}
+                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground/60 hover:text-foreground transition-colors"
+                  style={{ border: "0.5px solid rgba(26,26,31,0.15)" }}
+                >
+                  <RefreshCw className="h-3 w-3" strokeWidth={1.5} />
+                  Try Another
+                  <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
+                </button>
+
+                {showProfilePicker && (
+                  <div
+                    className="absolute left-0 top-full mt-1 z-20 rounded-xl py-1 min-w-[140px]"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.95)",
+                      backdropFilter: "blur(20px)",
+                      border: "0.5px solid rgba(26,26,31,0.12)",
+                      boxShadow: "0 8px 24px -8px rgba(60,70,90,0.2)",
+                    }}
+                  >
+                    {(["visualizer", "storyteller", "inhabitant", "remixer"] as MakerProfileType[]).map((profile) => (
+                      <button
+                        key={profile}
+                        type="button"
+                        onClick={() => {
+                          setCurrentPrompt(getPromptForProfile(profile))
+                          setShowProfilePicker(false)
+                        }}
+                        className={`w-full px-3 py-2 text-left font-mono text-[11px] hover:bg-foreground/5 transition-colors ${
+                          currentPrompt.profile === profile ? "text-foreground font-medium" : "text-foreground/70"
+                        }`}
+                      >
+                        {MAKER_PROFILE_INFO[profile].name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPrompt(FREE_CREATE_PROMPT)}
+                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground/60 hover:text-foreground transition-colors"
+                style={{ border: "0.5px solid rgba(26,26,31,0.15)" }}
+              >
+                Free Create
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPromptVisible(true)}
+            className="flex items-center gap-2 rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground/50 hover:text-foreground/70 transition-colors"
+            style={{ border: "0.5px dashed rgba(26,26,31,0.2)" }}
+          >
+            <Sparkles className="h-3 w-3" strokeWidth={1.5} />
+            Show Prompt
+          </button>
+        )}
+
         {selectedArtwork && (
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45">
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45">
             referencing · {selectedArtwork.title}
           </p>
         )}
