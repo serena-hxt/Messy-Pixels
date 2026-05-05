@@ -302,8 +302,10 @@ export function ChatThread({
     items.push({ kind: "msg", key: m.id, t: i, node: m })
   })
   drawings.forEach((d) => {
+    // Ensure drawings are sorted after all messages chronologically
     items.push({ kind: "drawing", key: d.id, t: messages.length + d.createdAt / 1e10, node: d })
   })
+  // Stable sort: preserves order for equal timestamps
   items.sort((a, b) => a.t - b.t)
 
   return (
@@ -327,13 +329,17 @@ export function ChatThread({
             >
               <div
                 className="overflow-hidden rounded-[16px] bg-white"
-                style={{ border: "0.5px solid rgba(26,26,31,0.1)" }}
+                style={{ 
+                  border: "0.5px solid rgba(26,26,31,0.1)",
+                  // Define height to prevent layout shift during image load
+                  aspectRatio: "16/10",
+                }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={selectedArtwork.primaryimageurl}
                   alt={`${selectedArtwork.title} by ${selectedArtwork.artist || "unknown artist"}`}
-                  className="h-auto w-full"
+                  className="h-full w-full object-cover"
                 />
               </div>
               <figcaption className="mt-3 px-1 font-mono text-[12px] text-foreground/65">
@@ -355,13 +361,17 @@ export function ChatThread({
                   >
                     <div
                       className="overflow-hidden rounded-[14px] bg-white"
-                      style={{ border: "0.5px solid rgba(26,26,31,0.08)" }}
+                      style={{ 
+                        border: "0.5px solid rgba(26,26,31,0.08)",
+                        // Define aspect ratio to prevent layout shift during image load
+                        aspectRatio: "16/10",
+                      }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={item.node.dataUrl || "/placeholder.svg"}
                         alt={item.node.note ?? "User sketch"}
-                        className="block h-auto w-full"
+                        className="block h-full w-full object-cover"
                       />
                     </div>
                     <figcaption className="mt-2 px-1 pb-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/45">
