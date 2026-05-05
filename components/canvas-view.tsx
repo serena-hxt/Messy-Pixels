@@ -13,23 +13,48 @@ import {
   Pencil,
   PenLine,
   RefreshCw,
+  Save,
   Shuffle,
+  Smile,
   Trash2,
   Type,
   Sparkles,
   Droplets,
+  Undo2,
+  Wand2,
   X,
 } from "lucide-react"
 import { useSelectedArtwork } from "@/contexts/selected-artwork-context"
-import { loadMakerProfile, MAKER_PROFILE_INFO, type MakerProfileType } from "@/lib/storage"
+import {
+  addToGallery,
+  loadMakerProfile,
+  loadProfile,
+  MAKER_PROFILE_INFO,
+  type GalleryItem,
+  type MakerProfileType,
+  type PrivacyLevel,
+} from "@/lib/storage"
 import { getPromptForProfile, shufflePrompt, FREE_CREATE_PROMPT, type CreativePrompt } from "@/lib/prompts"
 import { CURATED_ARTWORKS, type CuratedArtwork } from "@/lib/curated-artworks"
+import {
+  composeOverlaysToCanvas,
+  newOverlayId,
+  STICKER_LABELS,
+  STICKER_ORDER,
+  type CanvasOverlay,
+  type RemixMode,
+  type StickerKind,
+  type StickerOverlay,
+  type TextOverlay,
+} from "@/lib/canvas-overlays"
+import { buildRemixOverlays, REMIX_PRESETS } from "@/lib/canvas-remix"
+import { CanvasOverlayLayer, StickerSvg } from "@/components/canvas-overlay-layer"
+import { SaveModal } from "@/components/save-modal"
 
 /* -------------------------------------------------------------------------- */
 /* Types & Constants                                                           */
 /* -------------------------------------------------------------------------- */
 
-type Mode = "draw" | "text"
 type BrushType = "pencil" | "pen" | "oil" | "watercolor" | "wax"
 
 interface BrushPreset {
@@ -257,12 +282,10 @@ export function CanvasView({
   const palette = useMemo(() => buildPalette(selectedArtwork?.colors), [selectedArtwork])
   const initialBrush = useMemo(() => defaultBrushForMedium(selectedArtwork?.medium), [selectedArtwork])
 
-  const [mode, setMode] = useState<Mode>("draw")
   const [brushType, setBrushType] = useState<BrushType>(initialBrush)
   const [color, setColor] = useState<string>(palette[0] ?? "#1a1a1f")
   const [brushSize, setBrushSize] = useState<number>(4)
   const [brushTransparency, setBrushTransparency] = useState<number>(100)
-  const [note, setNote] = useState<string>("")
   const [hasInk, setHasInk] = useState(false)
 
   // Prompt state — personalized based on maker profile
@@ -297,6 +320,30 @@ export function CanvasView({
 
   // Album picker — floating popup at bottom-left of the canvas.
   const [albumOpen, setAlbumOpen] = useState(false)
+
+  // ---------- Overlays (movable text + stickers) ----------
+  const [overlays, setOverlays] = useState<CanvasOverlay[]>([])
+  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null)
+  const [editingTextId, setEditingTextId] = useState<string | null>(null)
+
+  // ---------- Remix preset ----------
+  const [remixMode, setRemixMode] = useState<RemixMode>(null)
+
+  // ---------- Save modal ----------
+  const [saveModalOpen, setSaveModalOpen] = useState(false)
+  const [savePreviewUrl, setSavePreviewUrl] = useState<string | null>(null)
+
+  // ---------- Undo history ----------
+  // Each snapshot stores per-layer pixel dataURLs + the full overlay list +
+  // the active remix mode, so undo restores both raster strokes and overlays.
+  type Snapshot = {
+    layerData: (string | null)[]
+    overlays: CanvasOverlay[]
+    remix: RemixMode
+  }
+  const historyRef = useRef<Snapshot[]>([])
+  const [canUndo, setCanUndo] = useState(false)
+  const MAX_HISTORY = 25
 
   // Sync brush + palette when a new artwork is selected mid-session.
   const lastArtworkIdRef = useRef<number | null>(null)
@@ -484,12 +531,16 @@ export function CanvasView({
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if (mode !== "draw") return
     e.preventDefault()
     const idx = activeLayerRef.current
     const canvas = layerRefs.current[idx]
     if (!canvas) return
     if (!layers[idx]?.visible) return // can't draw on a hidden layer
+    // Tap on empty area clears overlay selection.
+    setSelectedOverlayId(null)
+    setEditingTextId(null)
+    // Snapshot BEFORE the stroke begins so Undo can revert this stroke.
+    pushSnapshot()
     canvas.setPointerCapture?.(e.pointerId)
     drawingRef.current = true
     // Mark this layer as occupied so the album skips it when picking next slot.
@@ -509,7 +560,7 @@ export function CanvasView({
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!drawingRef.current || mode !== "draw") return
+    if (!drawingRef.current) return
     const idx = activeLayerRef.current
     const canvas = layerRefs.current[idx]
     if (!canvas) return
@@ -523,7 +574,7 @@ export function CanvasView({
   }
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (mode !== "draw") return
+    if (!drawingRef.current) return
     drawingRef.current = false
     lastPtRef.current = null
     const idx = activeLayerRef.current
@@ -635,9 +686,146 @@ export function CanvasView({
     setHasInk(false)
   }
 
-  /* ---------------- Compose final image on close ---------------- */
+  /* ---------------- Undo: snapshot & restore ---------------- */
 
-  const composeFinalImage = (): string | null => {
+  // Capture a Snapshot of the current canvas state (raster + overlays + remix).
+  const pushSnapshot = useCallback(() => {
+    const layerData = layerRefs.current.map((c) => {
+      try {
+        return c ? c.toDataURL("image/png") : null
+      } catch {
+        return null
+      }
+    })
+    historyRef.current.push({ layerData, overlays: [...overlays], remix: remixMode })
+    if (historyRef.current.length > MAX_HISTORY) {
+      historyRef.current.shift()
+    }
+    setCanUndo(true)
+  }, [overlays, remixMode])
+
+  const undo = useCallback(() => {
+    const snap = historyRef.current.pop()
+    setCanUndo(historyRef.current.length > 0)
+    if (!snap) return
+
+    // Restore overlays + remix
+    setOverlays(snap.overlays)
+    setRemixMode(snap.remix)
+    setSelectedOverlayId(null)
+    setEditingTextId(null)
+
+    // Restore each layer's pixel data
+    snap.layerData.forEach((dataUrl, i) => {
+      const canvas = layerRefs.current[i]
+      if (!canvas) return
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.restore()
+      if (!dataUrl) return
+      const img = new Image()
+      img.onload = () => {
+        const ctx2 = canvas.getContext("2d")
+        if (!ctx2) return
+        ctx2.save()
+        ctx2.setTransform(1, 0, 0, 1, 0, 0)
+        ctx2.drawImage(img, 0, 0)
+        ctx2.restore()
+      }
+      img.src = dataUrl
+    })
+
+    // Recompute layer-has-content from snapshot (best-effort: assume same).
+    setLayerHasContent((prev) =>
+      prev.map((had, i) => had || Boolean(snap.layerData[i])),
+    )
+    setHasInk(snap.overlays.length > 0 || snap.layerData.some((d) => Boolean(d)))
+  }, [])
+
+  /* ---------------- Overlay add / move / delete ---------------- */
+
+  const getCanvasCenter = () => {
+    const rect = containerRef.current?.getBoundingClientRect()
+    return {
+      x: (rect?.width ?? 600) / 2,
+      y: (rect?.height ?? 400) / 2,
+    }
+  }
+
+  const addTextOverlay = useCallback(() => {
+    pushSnapshot()
+    const center = getCanvasCenter()
+    const id = newOverlayId()
+    const next: TextOverlay = {
+      id,
+      kind: "text",
+      x: center.x,
+      y: center.y,
+      text: "Type here",
+      color: "#1a1a1f",
+      fontSize: 28,
+      weight: "bold",
+      family: "sans",
+    }
+    setOverlays((prev) => [...prev, next])
+    setSelectedOverlayId(id)
+    setEditingTextId(id) // immediately enter edit mode
+    setHasInk(true)
+  }, [pushSnapshot])
+
+  const addStickerOverlay = useCallback(
+    (kind: StickerKind) => {
+      pushSnapshot()
+      const center = getCanvasCenter()
+      const id = newOverlayId()
+      const next: StickerOverlay = {
+        id,
+        kind: "sticker",
+        sticker: kind,
+        x: center.x,
+        y: center.y,
+        size: 80,
+        color: kind === "heart" ? "#e76f51" : kind === "ufo" ? "#5ebdff" : "#1a1a1f",
+      }
+      setOverlays((prev) => [...prev, next])
+      setSelectedOverlayId(id)
+      setHasInk(true)
+    },
+    [pushSnapshot],
+  )
+
+  /* ---------------- Remix presets ---------------- */
+
+  const applyRemixPreset = useCallback(
+    (mode: NonNullable<RemixMode>) => {
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      pushSnapshot()
+      // Build the preset's overlays sized to current canvas.
+      const presetOverlays = buildRemixOverlays(mode, rect.width, rect.height)
+      // Replace any prior remix overlays (we don't tag them; user can keep their
+      // own additions by undoing instead).
+      setOverlays(presetOverlays)
+      setRemixMode(mode)
+      setSelectedOverlayId(null)
+      setEditingTextId(null)
+      setHasInk(true)
+    },
+    [pushSnapshot],
+  )
+
+  const remixFrameStyle = useMemo(() => {
+    if (!remixMode) return null
+    const preset = REMIX_PRESETS.find((p) => p.id === remixMode)
+    return preset?.frameStyle ?? null
+  }, [remixMode])
+
+  /* ---------------- Compose final image ---------------- */
+
+  const composeFinalImage = useCallback((): string | null => {
     const container = containerRef.current
     if (!container) return null
     const rect = container.getBoundingClientRect()
@@ -667,13 +855,76 @@ export function CanvasView({
       if (c) ctx.drawImage(c, 0, 0)
     })
 
+    // Overlays (text + stickers) — stored in CSS pixels, so scale by DPR.
+    if (overlays.length > 0) {
+      ctx.save()
+      ctx.scale(dpr, dpr)
+      composeOverlaysToCanvas(ctx, overlays)
+      ctx.restore()
+    }
+
+    // Remix frame: emulate inset borders for movie-poster, neon, dreamy modes.
+    drawRemixFrame(ctx, out.width, out.height, dpr, remixMode)
+
     return out.toDataURL("image/png")
-  }
+  }, [referenceEnabled, referenceOpacity, layers, overlays, remixMode])
+
+  /* ---------------- Save flow ---------------- */
+
+  const openSaveModal = useCallback(() => {
+    const dataUrl = composeFinalImage()
+    if (!dataUrl) return
+    setSavePreviewUrl(dataUrl)
+    setSaveModalOpen(true)
+  }, [composeFinalImage])
+
+  const handleSaveCreation = useCallback(
+    ({ title, privacy }: { title: string; privacy: PrivacyLevel }) => {
+      const dataUrl = savePreviewUrl
+      if (!dataUrl) return
+      const author = loadProfile().displayName
+      const rect = containerRef.current?.getBoundingClientRect()
+      const item: GalleryItem = {
+        id: `gal_${Date.now()}`,
+        dataUrl,
+        title,
+        author,
+        likes: 0,
+        createdAt: Date.now(),
+        isMine: true,
+        privacy,
+        artworkId: selectedArtwork?.id,
+        artworkTitle: selectedArtwork?.title,
+        prompt: currentPrompt?.text,
+        makerProfile: currentPrompt?.profile ?? makerProfile ?? undefined,
+        remixMode,
+        overlays: overlays as unknown[],
+        canvasWidth: rect?.width,
+        canvasHeight: rect?.height,
+      }
+      addToGallery(item)
+      setSaveModalOpen(false)
+      setSavePreviewUrl(null)
+      // Close the canvas without re-saving via legacy flow.
+      onClose()
+    },
+    [
+      savePreviewUrl,
+      selectedArtwork,
+      currentPrompt,
+      makerProfile,
+      remixMode,
+      overlays,
+      onClose,
+    ],
+  )
 
   const handleClose = () => {
+    // Legacy close path (back arrow): pass the composed image to the chat
+    // thread so the user can show their work in the conversation.
     const dataUrl = composeFinalImage()
-    if (dataUrl && hasInk) {
-      onClose({ dataUrl, note: note.trim() || undefined })
+    if (dataUrl && (hasInk || overlays.length > 0)) {
+      onClose({ dataUrl })
     } else {
       onClose()
     }
@@ -821,10 +1072,12 @@ export function CanvasView({
           style={{
             backgroundColor: "#ffffff",
             boxShadow:
+              remixFrameStyle?.boxShadow ??
               "0 1px 0 rgba(255,255,255,0.9) inset, 0 24px 48px -28px rgba(60,70,90,0.22), 0 4px 14px -8px rgba(60,70,90,0.12)",
             border: "0.5px solid rgba(26,26,31,0.08)",
             touchAction: "none",
-            cursor: mode === "draw" ? "crosshair" : "default",
+            cursor: "crosshair",
+            transition: "box-shadow 200ms ease",
           }}
           aria-label="Drawing canvas"
         >
@@ -849,15 +1102,14 @@ export function CanvasView({
             />
           ))}
 
-          {!hasInk && mode === "draw" && (
+          {!hasInk && overlays.length === 0 && (
             <p className="pointer-events-none absolute bottom-5 right-5 font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/30">
               tap & drag to sketch
             </p>
           )}
 
           {/* Floating Album button — bottom-left of the canvas */}
-          {mode === "draw" && (
-            <div className="absolute bottom-4 left-4 z-20">
+          <div className="absolute bottom-4 left-4 z-20">
               {/* Popup panel — appears above the button when open */}
               {albumOpen && (
                 <div
@@ -940,45 +1192,80 @@ export function CanvasView({
                 <BookOpen className="h-5 w-5 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
               </button>
             </div>
-          )}
+
+          {/* Overlay layer — text + sticker DOM elements over the canvas */}
+          <CanvasOverlayLayer
+            overlays={overlays}
+            selectedId={selectedOverlayId}
+            editingTextId={editingTextId}
+            onClearSelection={() => {
+              setSelectedOverlayId(null)
+              setEditingTextId(null)
+            }}
+            onSelect={setSelectedOverlayId}
+            onUpdate={(id, patch) => {
+              setOverlays((prev) =>
+                prev.map((o) => (o.id === id ? ({ ...o, ...patch } as CanvasOverlay) : o)),
+              )
+              setHasInk(true)
+            }}
+            onDelete={(id) => {
+              pushSnapshot()
+              setOverlays((prev) => prev.filter((o) => o.id !== id))
+              if (selectedOverlayId === id) setSelectedOverlayId(null)
+              if (editingTextId === id) setEditingTextId(null)
+            }}
+            onDragStart={() => pushSnapshot()}
+            onSetEditingText={setEditingTextId}
+          />
         </div>
       </div>
 
       {/* Toolbar */}
       <div className="sticky bottom-0 z-10 px-4 pb-6 sm:px-8 md:px-12">
-        {mode === "draw" ? (
-          <DrawToolbar
-            color={color}
-            brushSize={brushSize}
-            brushType={brushType}
-            brushTransparency={brushTransparency}
-            palette={palette}
-            layers={layers}
-            activeLayer={activeLayer}
-            referenceEnabled={referenceEnabled}
-            referenceOpacity={referenceOpacity}
-            hasReference={Boolean(selectedArtwork?.primaryimageurl)}
-            onColorChange={setColor}
-            onBrushSizeChange={setBrushSize}
-            onBrushTypeChange={setBrushType}
-            onBrushTransparencyChange={setBrushTransparency}
-            onLayerSelect={setActiveLayer}
-            onLayerToggle={toggleLayerVisibility}
-            onReferenceToggle={() => setReferenceEnabled((v) => !v)}
-            onReferenceOpacityChange={setReferenceOpacity}
-            onSwitchToText={() => setMode("text")}
-            onClear={clearActiveLayer}
-            hasInk={hasInk}
-          />
-        ) : (
-          <TextToolbar
-            note={note}
-            onNoteChange={setNote}
-            onSwitchToDraw={() => setMode("draw")}
-            onSubmit={handleClose}
-          />
-        )}
+        <DrawToolbar
+          color={color}
+          brushSize={brushSize}
+          brushType={brushType}
+          brushTransparency={brushTransparency}
+          palette={palette}
+          layers={layers}
+          activeLayer={activeLayer}
+          referenceEnabled={referenceEnabled}
+          referenceOpacity={referenceOpacity}
+          hasReference={Boolean(selectedArtwork?.primaryimageurl)}
+          remixMode={remixMode}
+          canUndo={canUndo}
+          hasInk={hasInk || overlays.length > 0}
+          onColorChange={setColor}
+          onBrushSizeChange={setBrushSize}
+          onBrushTypeChange={setBrushType}
+          onBrushTransparencyChange={setBrushTransparency}
+          onLayerSelect={setActiveLayer}
+          onLayerToggle={toggleLayerVisibility}
+          onReferenceToggle={() => setReferenceEnabled((v) => !v)}
+          onReferenceOpacityChange={setReferenceOpacity}
+          onAddText={addTextOverlay}
+          onAddSticker={addStickerOverlay}
+          onApplyRemix={applyRemixPreset}
+          onUndo={undo}
+          onClear={clearActiveLayer}
+          onSave={openSaveModal}
+        />
       </div>
+
+      {/* Save modal — opens when user clicks Save in the toolbar */}
+      {saveModalOpen && savePreviewUrl && (
+        <SaveModal
+          previewUrl={savePreviewUrl}
+          defaultTitle={selectedArtwork ? `After ${selectedArtwork.title}` : ""}
+          onSave={handleSaveCreation}
+          onCancel={() => {
+            setSaveModalOpen(false)
+            setSavePreviewUrl(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -1471,65 +1758,4 @@ function DrawToolbar({
   )
 }
 
-/* -------------------------------------------------------------------------- */
-/* TextToolbar                                                                 */
-/* -------------------------------------------------------------------------- */
 
-function TextToolbar({
-  note,
-  onNoteChange,
-  onSwitchToDraw,
-  onSubmit,
-}: {
-  note: string
-  onNoteChange: (v: string) => void
-  onSwitchToDraw: () => void
-  onSubmit: () => void
-}) {
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSubmit()
-      }}
-      className="flex items-center gap-3 rounded-[28px] px-3 py-3"
-      style={{
-        backgroundColor: "#f0f2f5",
-        boxShadow:
-          "inset 6px 6px 12px #d1d9e6, inset -6px -6px 12px #ffffff, 0 12px 30px -12px rgba(60,70,90,0.1)",
-      }}
-    >
-      <div
-        className="flex flex-1 items-center rounded-full px-4 py-2"
-        style={{
-          background: "linear-gradient(145deg, #eef0f4, #ffffff)",
-          boxShadow:
-            "inset 4px 4px 8px rgba(209,217,230,0.9), inset -4px -4px 8px rgba(255,255,255,0.95)",
-        }}
-      >
-        <input
-          type="text"
-          value={note}
-          onChange={(e) => onNoteChange(e.target.value)}
-          placeholder="Describe your artistic thoughts..."
-          aria-label="Artistic note"
-          autoComplete="off"
-          className="w-full bg-transparent font-mono text-[13px] font-light text-foreground placeholder:text-foreground/40 focus:outline-none"
-        />
-      </div>
-
-      <button
-        type="button"
-        onClick={onSwitchToDraw}
-        aria-label="Switch to drawing"
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-        style={{
-          background: "linear-gradient(145deg, #ffffff, #eef0f4)",
-          boxShadow: "4px 4px 10px rgba(209,217,230,0.9), -4px -4px 10px rgba(255,255,255,0.95)",
-        }}
-      >
-        <Pencil className="h-4 w-4 text-foreground/80" strokeWidth={1.5} aria-hidden="true" />
-      </button>
-    </form>
-  )
-}
