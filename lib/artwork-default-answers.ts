@@ -1022,22 +1022,27 @@ export const SCRIPTED_BRANCHES: ScriptedBranch[] = [
     objectid: 299843,
     steps: [
       {
-        response: `Start with his eyes — they're the emotional anchor of this painting. Unlike many of his other self-portraits where anxiety radiates from his gaze, here Van Gogh looks directly at you with unusual calm. This was intentional; he wanted Gauguin to see him as a serene, dedicated artist.`,
-        userPrompt: `He is worrying about his friendship with Gauguin.`,
+        // Step 0 — initial response includes the prompted question in the
+        // SAME bubble. The user is NOT auto-advanced; they must type anything
+        // in the chat box to trigger the next preset response.
+        response: `Start with his eyes — they're the emotional anchor of this painting. Unlike many of his other self-portraits where anxiety radiates from his gaze, here Van Gogh looks directly at you with unusual calm. This was intentional; he wanted Gauguin to see him as a serene, dedicated artist.\n\nLooking deeper into that serene expression... What is he thinking? What is he staring at?`,
       },
       {
+        // Step 1 — fires after user types anything.
         response: `That's a poignant observation. Their relationship was indeed intense and fragile. What is he worried about?`,
-        userPrompt: `Gauguin doesn't like his style.`,
       },
       {
+        // Step 2 — fires after user types anything.
         response: `That's a sharp insight into their artistic tension. I'm curious about your perspective... How did you come up with that idea?`,
-        userPrompt: `Because I saw the worries in his eyes.`,
       },
       {
+        // Step 3 — final scripted response. A "Draw on canvas" CTA is
+        // rendered below this bubble. Clicking it opens the canvas.
         response: `It's incredible how much emotion he could pack into a single gaze. If you could step beyond the frame and reach out to him... If you are in this portrait, how do you want to interact with him?`,
         canvasAction: true,
       },
       {
+        // Step 4 — only fired after canvas submission, by handleCanvasClose.
         response: `Thank you for your beautiful addition. In a world that was often harsh to him, this simple, thoughtful gesture of kindness—giving a single flower—is a profound act of compassion. I believe that for a moment, Vincent truly felt seen and comforted by you.`,
         finalReward: {
           imageUrl: `https://images.metmuseum.org/CRDImages/ma/original/299843.jpg`,

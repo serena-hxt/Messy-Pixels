@@ -96,78 +96,75 @@ export default function HomePage() {
     }
   }, [messages, status])
 
-  const handleSubmit = () => {
-    const text = input.trim()
-    if (!text) return
-    sendMessage({ text })
-    setInput("")
-  }
+  // Advance the scripted flow by one step. The user's input becomes a user
+  // bubble, and the next preset response becomes Bitsy's reply. No LLM call.
+  // Returns true if the flow handled the input, false if the caller should
+  // fall through to a normal AI message.
+  const advanceScriptedFlow = (userText: string): boolean => {
+    if (!scriptedFlow) return false
 
-  // Handle follow-up question clicks — check if we're in a scripted flow
-  const handleAskQuestion = (question: string) => {
-    if (!scriptedFlow) {
-      // Not in a scripted flow — send normally
-      sendMessage({ text: question })
-      return
-    }
-
-    // In a scripted flow — check if we can advance to the next step
     const branch = getScriptedBranch(scriptedFlow.triggerQuestion, scriptedFlow.objectid)
     if (!branch) {
-      // Scripted branch not found (shouldn't happen), fall back to normal
-      sendMessage({ text: question })
-      return
+      // Branch lookup failed — exit scripted mode and let caller handle.
+      setScriptedFlow(null)
+      return false
     }
 
     const nextStepIndex = scriptedFlow.stepIndex + 1
     if (nextStepIndex >= branch.steps.length) {
-      // Scripted flow complete — exit scripted mode
+      // Already past the last scripted step (the final reward step is fired
+      // explicitly by handleCanvasClose, not by typing). Exit scripted mode
+      // so subsequent typing goes to the AI normally.
       setScriptedFlow(null)
-      setPendingFollowUps(null)
-      return
+      return false
     }
 
-    // Advance to next step in the scripted flow
     const nextStep = branch.steps[nextStepIndex]
-    
-    // Add user message (either the passed question or the scripted prompt)
+
+    // The current step (BEFORE advancing) had canvasAction. The user is
+    // expected to click the canvas CTA, not type. If they type instead, we
+    // still gracefully advance to the canvas — but this branch normally
+    // shouldn't fire because step 3 is the canvasAction step and step 4 is
+    // only triggered post-canvas-submit.
     const userMsg: UIMessage = {
       id: `synth_user_${Date.now()}`,
       role: "user",
-      parts: [{ type: "text", text: question }],
+      parts: [{ type: "text", text: userText }],
       createdAt: new Date(),
     }
-    
-    // Add assistant response
     const assistantMsg: UIMessage = {
-      id: `synth_assistant_${Date.now()}`,
+      id: `synth_assistant_${Date.now() + 1}`,
       role: "assistant",
       parts: [{ type: "text", text: nextStep.response }],
       createdAt: new Date(),
     }
-    
+
     setSyntheticMessages((prev) => [...prev, userMsg, assistantMsg])
-    setScriptedFlow({
-      ...scriptedFlow,
-      stepIndex: nextStepIndex,
-    })
-    
-    // If this step has canvas action, show canvas button
-    if (nextStep.canvasAction) {
-      setCanvasReadyCue(true)
-      setPendingFollowUps(null)
-    } 
-    // If there's a pre-set user prompt, auto-trigger it after a delay
-    else if (nextStep.userPrompt) {
-      // Simulate user thinking briefly before auto-advancing
-      setTimeout(() => {
-        handleAskQuestion(nextStep.userPrompt!)
-      }, 800)
-    }
-    // No further action
-    else {
-      setPendingFollowUps(null)
-    }
+    setScriptedFlow({ ...scriptedFlow, stepIndex: nextStepIndex })
+    setPendingFollowUps(null)
+    return true
+  }
+
+  const handleSubmit = () => {
+    const text = input.trim()
+    if (!text) return
+    setInput("")
+
+    // If we're in a scripted flow, ANY user input advances the preset
+    // narrative — no API call to Gemini. The flow only exits when the user
+    // explicitly leaves it (canvas submission resolves the final step, or
+    // the script runs out of preset responses).
+    if (advanceScriptedFlow(text)) return
+
+    sendMessage({ text })
+  }
+
+  // Handle follow-up question clicks (legacy follow-up chips for non-scripted
+  // default-answer artworks). For scripted flows we route through the same
+  // scripted advancer so typing or clicking a chip behaves identically.
+  const handleAskQuestion = (question: string) => {
+    if (advanceScriptedFlow(question)) return
+    sendMessage({ text: question })
   }
 
   const hasConversation = messages.length > 0 || syntheticMessages.length > 0 || drawings.length > 0
@@ -380,6 +377,24 @@ export default function HomePage() {
                       setPendingFollowUps(null)
                     }}
                     onEditOnArtwork={handleEditOnArtwork}
+                    showCanvasCue={(() => {
+                      // Inline derivation: when the current scripted step is
+                      // marked as `canvasAction`, render the inline CTA
+                      // beneath Bitsy's last reply.
+                      if (!scriptedFlow) return false
+                      const branch = getScriptedBranch(
+                        scriptedFlow.triggerQuestion,
+                        scriptedFlow.objectid,
+                      )
+                      return Boolean(branch?.steps[scriptedFlow.stepIndex]?.canvasAction)
+                    })()}
+                    onCanvas={() => {
+                      if (selectedArtwork) {
+                        setCanvasStartWithReference(true)
+                      }
+                      setCanvasOpen(true)
+                      setCanvasReadyCue(false)
+                    }}
                   />
                 ) : (
                   <BitsyCard onAsk={(question) => sendMessage({ text: question })} />
@@ -435,14 +450,9 @@ export default function HomePage() {
                   createdAt: new Date(),
                 }
                 setSyntheticMessages((prev) => [...prev, userMsg, assistantMsg])
-                
-                // Auto-trigger the first user prompt after a brief delay (simulating user response)
-                const firstStep = scriptedBranch.steps[0]
-                if (firstStep.userPrompt) {
-                  setTimeout(() => {
-                    handleAskQuestion(firstStep.userPrompt!)
-                  }, 800)
-                }
+                // Wait for the user to type ANYTHING in the chat box; the
+                // next scripted response fires from advanceScriptedFlow().
+                setPendingFollowUps(null)
                 setCurrentArtworkId(artworkId)
                 return
               }

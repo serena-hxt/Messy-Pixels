@@ -173,17 +173,25 @@ interface ChatThreadProps {
   followUpQuestions?: [string, string] | null
   onAsk?: (question: string) => void
   /**
-   * Called when the user taps "edit on artwork" inside an ArtworkCard.
-   * Lets the host page jump to the canvas with this artwork as the reference layer.
-   */
+  * Called when the user taps "edit on artwork" inside an ArtworkCard.
+  * Lets the host page jump to the canvas with this artwork as the reference layer.
+  */
   onEditOnArtwork?: (artwork: Artwork) => void
-}
+  /**
+   * When true, renders an inline "Draw on canvas" CTA below the latest
+   * assistant bubble. Used at the end of scripted conversation branches
+   * that prompt the user to step into the artwork via the canvas.
+   */
+  showCanvasCue?: boolean
+  /** Called when the user taps the inline canvas CTA. */
+  onCanvas?: () => void
+  }
 
 type Item =
   | { kind: "msg"; key: string; t: number; node: UIMessage }
   | { kind: "drawing"; key: string; t: number; node: SavedDrawing }
 
-export function ChatThread({
+  export function ChatThread({
   messages,
   status,
   drawings = [],
@@ -191,7 +199,9 @@ export function ChatThread({
   followUpQuestions,
   onAsk,
   onEditOnArtwork,
-}: ChatThreadProps) {
+  showCanvasCue,
+  onCanvas,
+  }: ChatThreadProps) {
   const scrollRef = useRef<HTMLElement | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const userScrolledUpRef = useRef(false)
@@ -496,6 +506,49 @@ export function ChatThread({
                         </span>
                       </button>
                     ))}
+                  </div>
+                )}
+
+                {/* Canvas CTA — appears below the last assistant bubble when
+                    a scripted flow reaches its canvas-action step. */}
+                {showCanvasCue && m.id === lastAssistantId && !isStreaming && onCanvas && (
+                  <div className="ml-1 pt-1">
+                    <button
+                      type="button"
+                      onClick={onCanvas}
+                      className="group flex max-w-[88%] items-center gap-3 self-start rounded-full bg-foreground px-4 py-2.5 text-left text-background transition-transform hover:translate-y-[-1px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      style={{
+                        boxShadow: "0 12px 28px -14px rgba(26, 26, 31, 0.45)",
+                        opacity: 0,
+                        animation: `meta-rise 480ms ease-out 160ms both`,
+                      }}
+                      aria-label="Open canvas to draw on the artwork"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-[18px] w-[18px] shrink-0"
+                      >
+                        <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18" />
+                        <path d="M2 2l7.586 7.586" />
+                        <circle cx="11" cy="11" r="2" />
+                      </svg>
+                      <span className="font-mono text-[12.5px] font-light tracking-wide">
+                        Draw on canvas
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="font-mono text-[14px] opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100"
+                      >
+                        →
+                      </span>
+                    </button>
                   </div>
                 )}
               </div>
