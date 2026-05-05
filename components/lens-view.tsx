@@ -33,7 +33,7 @@ const HISTORY_KEY = "bitsy_recognized_v1"
 interface LensViewProps {
   onClose: () => void
   /** Called when user taps an AI question prompt — closes the lens and fires a chat message */
-  onAskAI?: (question: string) => void
+  onAskAI?: (question: string, artworkId: number) => void
 }
 
 export function LensView({ onClose, onAskAI }: LensViewProps) {
@@ -447,7 +447,7 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
                   key={question}
                   type="button"
                   onClick={() => {
-                    onAskAI?.(question)
+                    onAskAI?.(question, digitalTwin.id)
                   }}
                   className="group flex items-center gap-3 rounded-xl border border-white/18 bg-black/35 px-4 py-3 text-left backdrop-blur-xl transition-colors hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                   style={{ boxShadow: "0 8px 20px -10px rgba(0,0,0,0.5)" }}

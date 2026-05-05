@@ -17,6 +17,8 @@ import { ProfileView } from "@/components/profile-view"
 import { GalleryView } from "@/components/gallery-view"
 import { deriveSessionTitle, upsertSession, type ChatSession } from "@/lib/storage"
 import { useSelectedArtwork, type Artwork } from "@/contexts/selected-artwork-context"
+import { findDefaultAnswer } from "@/lib/artwork-default-answers"
+import type { UIMessage } from "ai"
 
 export interface SavedDrawing {
   id: string
@@ -33,6 +35,12 @@ export default function HomePage() {
   const [drawings, setDrawings] = useState<SavedDrawing[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState<MenuDestination | null>(null)
+  // System-generated messages for default artwork Q&A (no API call)
+  const [syntheticMessages, setSyntheticMessages] = useState<UIMessage[]>([])
+  // Follow-up questions to show below the last assistant message
+  const [pendingFollowUps, setPendingFollowUps] = useState<[string, string] | null>(null)
+  // Current artwork ID for follow-up context
+  const [currentArtworkId, setCurrentArtworkId] = useState<number | null>(null)
   const { setSelectedArtwork } = useSelectedArtwork()
   const lastTriggeredMessageIdRef = useRef<string | null>(null)
   const canvasCloseRef = useRef<(() => void) | null>(null)
@@ -84,7 +92,7 @@ export default function HomePage() {
     setInput("")
   }
 
-  const hasConversation = messages.length > 0 || drawings.length > 0
+  const hasConversation = messages.length > 0 || syntheticMessages.length > 0 || drawings.length > 0
 
   const isDiscussingArtwork = messages.some((m) => {
     const text = m.parts
@@ -197,11 +205,37 @@ export default function HomePage() {
               >
                 {hasConversation ? (
                   <ChatThread
-                    messages={messages}
+                    messages={[...syntheticMessages, ...messages]}
                     status={status}
                     drawings={drawings}
                     error={error}
-                    onAsk={(question) => sendMessage({ text: question })}
+                    followUpQuestions={pendingFollowUps}
+                    onAsk={(question) => {
+                      // Check if this is a follow-up question
+                      if (currentArtworkId) {
+                        const defaultQA = findDefaultAnswer(question, currentArtworkId)
+                        if (defaultQA) {
+                          const userMsg: UIMessage = {
+                            id: `synth_user_${Date.now()}`,
+                            role: "user",
+                            parts: [{ type: "text", text: question }],
+                            createdAt: new Date(),
+                          }
+                          const assistantMsg: UIMessage = {
+                            id: `synth_assistant_${Date.now()}`,
+                            role: "assistant",
+                            parts: [{ type: "text", text: defaultQA.answer }],
+                            createdAt: new Date(),
+                          }
+                          setSyntheticMessages((prev) => [...prev, userMsg, assistantMsg])
+                          setPendingFollowUps(defaultQA.followUps)
+                          return
+                        }
+                      }
+                      // No default — call the AI
+                      sendMessage({ text: question })
+                      setPendingFollowUps(null)
+                    }}
                     onEditOnArtwork={handleEditOnArtwork}
                   />
                 ) : (
@@ -225,9 +259,33 @@ export default function HomePage() {
         {lensOpen && (
           <LensView
             onClose={() => setLensOpen(false)}
-            onAskAI={(question) => {
+            onAskAI={(question, artworkId) => {
               setLensOpen(false)
-              sendMessage({ text: question })
+              // Check for pre-written default answer
+              const defaultQA = findDefaultAnswer(question, artworkId)
+              if (defaultQA) {
+                // Inject synthetic user + assistant messages (no API call)
+                const userMsg: UIMessage = {
+                  id: `synth_user_${Date.now()}`,
+                  role: "user",
+                  parts: [{ type: "text", text: question }],
+                  createdAt: new Date(),
+                }
+                const assistantMsg: UIMessage = {
+                  id: `synth_assistant_${Date.now()}`,
+                  role: "assistant",
+                  parts: [{ type: "text", text: defaultQA.answer }],
+                  createdAt: new Date(),
+                }
+                setSyntheticMessages((prev) => [...prev, userMsg, assistantMsg])
+                setPendingFollowUps(defaultQA.followUps)
+                setCurrentArtworkId(artworkId)
+              } else {
+                // No default — call the AI
+                sendMessage({ text: question })
+                setPendingFollowUps(null)
+                setCurrentArtworkId(null)
+              }
             }}
           />
         )}

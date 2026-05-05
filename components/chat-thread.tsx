@@ -98,6 +98,8 @@ interface ChatThreadProps {
   status: "submitted" | "streaming" | "ready" | "error"
   drawings?: SavedDrawing[]
   error?: Error | null
+  /** Pre-defined follow-up questions from default artwork answers (no API call) */
+  followUpQuestions?: [string, string] | null
   onAsk?: (question: string) => void
   /**
    * Called when the user taps "edit on artwork" inside an ArtworkCard.
@@ -115,6 +117,7 @@ export function ChatThread({
   status,
   drawings = [],
   error,
+  followUpQuestions,
   onAsk,
   onEditOnArtwork,
 }: ChatThreadProps) {
@@ -302,10 +305,10 @@ export function ChatThread({
                   </div>
                 )}
 
-                {/* Follow-up question chips */}
+                {/* Follow-up question chips — prioritize pre-defined followUpQuestions over API-generated suggestedQuestions */}
                 {isLatestAssistant && onAsk && (
                   <div className="ml-1 flex flex-col gap-2 pt-1">
-                    {suggestedQuestions.map((q, i) => (
+                    {(followUpQuestions ?? suggestedQuestions).map((q, i) => (
                       <button
                         key={`${m.id}-q-${i}`}
                         type="button"
