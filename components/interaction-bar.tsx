@@ -1,0 +1,130 @@
+"use client"
+
+import type React from "react"
+import { Camera, BookOpen, Mic, ImagePlus, ArrowUp } from "lucide-react"
+
+interface InteractionBarProps {
+  input: string
+  onInputChange: (value: string) => void
+  onSubmit: () => void
+  onCamera: () => void
+  onAlbum: () => void
+  onCanvas: () => void
+  status: "submitted" | "streaming" | "ready" | "error"
+  canvasReadyCue?: boolean
+}
+
+export function InteractionBar({
+  input,
+  onInputChange,
+  onSubmit,
+  onCamera,
+  onAlbum,
+  onCanvas,
+  status,
+  canvasReadyCue,
+}: InteractionBarProps) {
+  const isBusy = status === "submitted" || status === "streaming"
+  const canSend = input.trim().length > 0 && !isBusy
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canSend) return
+    onSubmit()
+  }
+
+  return (
+    <>
+      {/* Input bar — sits at the bottom of the flex column naturally.
+          z-10 ensures it layers above the artwork frame's absolute overlay. */}
+      <div
+        className="relative z-10 shrink-0 px-4 pb-6 pt-2 sm:px-8 md:px-12"
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)",
+        }}
+      >
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-[28px] bg-background/70 px-5 pb-4 pt-4 backdrop-blur-xl sm:px-6"
+          style={{
+            border: "0.75px solid rgba(26,26,31,0.18)",
+            boxShadow: "0 12px 30px -16px rgba(60, 70, 90, 0.15)",
+          }}
+        >
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => onInputChange(e.target.value)}
+          placeholder="Ask me anything..."
+          aria-label="Ask Bitsy anything"
+          autoComplete="off"
+          className="w-full bg-transparent font-mono text-[15px] font-light tracking-tight text-foreground placeholder:text-foreground/40 focus:outline-none"
+        />
+
+        <div className="mt-5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onCamera}
+              aria-label="Open camera (Lens)"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ border: "0.75px solid rgba(26,26,31,0.28)" }}
+            >
+              <Camera className="h-[16px] w-[16px]" strokeWidth={1.25} aria-hidden="true" />
+            </button>
+
+            <button
+              type="button"
+              onClick={onAlbum}
+              aria-label="Open album of popular works"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ border: "0.75px solid rgba(26,26,31,0.28)" }}
+            >
+              <BookOpen className="h-[16px] w-[16px]" strokeWidth={1.25} aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-5">
+            <button
+              type="button"
+              aria-label="Voice input"
+              className="rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Mic className="h-[20px] w-[20px]" strokeWidth={1.5} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={onCanvas}
+              aria-label="Edit image on canvas"
+              className="rounded-full text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring relative"
+              style={
+                canvasReadyCue
+                  ? {
+                      color: "rgba(26,26,31,0.9)",
+                      animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+                      boxShadow: "0 0 16px rgba(26,26,31,0.3), inset 0 0 8px rgba(26,26,31,0.1)",
+                    }
+                  : {}
+              }
+            >
+              <ImagePlus className="h-[20px] w-[20px]" strokeWidth={1.5} aria-hidden="true" />
+            </button>
+
+            {input.trim().length > 0 && (
+              <button
+                type="submit"
+                disabled={!canSend}
+                aria-label="Send message"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+              >
+                <ArrowUp className="h-[16px] w-[16px]" strokeWidth={2} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
+      </div>
+    </>
+  )
+}
+

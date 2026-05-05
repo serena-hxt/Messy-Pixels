@@ -1,0 +1,366 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Bitsy palette */
+  --background: #f8f9fa;
+  --foreground: #1a1a1f;
+  --muted: #ececef;
+  --muted-foreground: #6b6b73;
+  --card: rgba(255, 255, 255, 0.75);
+  --card-foreground: #1a1a1f;
+  --border: rgba(255, 255, 255, 0.4);
+  --ring: rgba(26, 26, 31, 0.2);
+  --radius: 1.5rem;
+
+  /* Aura accents */
+  --sage: #d4e4d4;
+  --rose: #f5e6e8;
+
+  /* Neumorphic shadow tokens (light) */
+  --neu-light: #ffffff;
+  --neu-dark: #d1d9e6;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  --color-sage: var(--sage);
+  --color-rose: var(--rose);
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 8px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  html {
+    @apply bg-background;
+  }
+
+  /*
+    Phone-frame visual on desktop only. On mobile the frame fills the
+    viewport so we leave the shadow off (no visible edge). At the md+
+    breakpoint the frame becomes a centered floating container with a
+    soft drop shadow and a 1px inner highlight to suggest a glass surface.
+  */
+  @media (min-width: 768px) {
+    :root {
+      --frame-shadow:
+        0 40px 80px -32px rgba(60, 70, 90, 0.32),
+        0 12px 28px -16px rgba(60, 70, 90, 0.16),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+    }
+    html {
+      background: #e9ebef;
+    }
+  }
+}
+
+@layer utilities {
+  /* Glass surface */
+  .glass {
+    background-color: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(40px) saturate(140%);
+    -webkit-backdrop-filter: blur(40px) saturate(140%);
+    border: 0.5px solid rgba(255, 255, 255, 0.6);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.7) inset,
+      0 30px 60px -20px rgba(60, 70, 90, 0.12);
+  }
+
+  /* Neumorphic outset (resting button) */
+  .neu-outset {
+    background: linear-gradient(145deg, #ffffff, #eef0f4);
+    box-shadow:
+      4px 4px 10px rgba(209, 217, 230, 0.9),
+      -4px -4px 10px rgba(255, 255, 255, 0.95);
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease,
+      background 180ms ease;
+  }
+  .neu-outset:hover {
+    transform: translateY(-1px);
+  }
+  .neu-outset:active,
+  .neu-inset {
+    background: linear-gradient(145deg, #eef0f4, #ffffff);
+    box-shadow:
+      inset 4px 4px 8px rgba(209, 217, 230, 0.9),
+      inset -4px -4px 8px rgba(255, 255, 255, 0.95);
+    transform: translateY(0);
+  }
+
+  /* Neumorphic tray (the bottom bar) */
+  .neu-tray {
+    background-color: #f0f2f5;
+    box-shadow:
+      inset 6px 6px 12px #d1d9e6,
+      inset -6px -6px 12px #ffffff,
+      0 12px 30px -12px rgba(60, 70, 90, 0.1);
+  }
+
+  /* Aura blob animations */
+  @keyframes drift-a {
+    0%,
+    100% {
+      transform: translate3d(-10%, -8%, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(10%, 8%, 0) scale(1.08);
+    }
+  }
+  @keyframes drift-b {
+    0%,
+    100% {
+      transform: translate3d(12%, 10%, 0) scale(1.05);
+    }
+    50% {
+      transform: translate3d(-8%, -6%, 0) scale(0.95);
+    }
+  }
+  .aura-blob-a {
+    animation: drift-a 18s ease-in-out infinite;
+  }
+  .aura-blob-b {
+    animation: drift-b 22s ease-in-out infinite;
+  }
+
+  /* Shimmer sweep across the Bitsy card on click */
+  @keyframes shimmer-sweep {
+    0% {
+      transform: translateX(-120%) skewX(-12deg);
+      opacity: 0;
+    }
+    20% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(220%) skewX(-12deg);
+      opacity: 0;
+    }
+  }
+  .animate-shimmer {
+    animation: shimmer-sweep 1100ms ease-out;
+  }
+
+  /* Slow fade for revealed artwork */
+  @keyframes soft-reveal {
+    from {
+      opacity: 0;
+      transform: scale(1.02);
+    }
+    to {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+  }
+  .animate-reveal {
+    animation: soft-reveal 900ms ease-out forwards;
+  }
+
+  /* Tight tracking for thin display text */
+  .tracking-display {
+    letter-spacing: -0.05em;
+  }
+
+  /* 3D flip primitives */
+  .perspective-1200 {
+    perspective: 1200px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+
+  /* Lens metadata fade-in */
+  @keyframes meta-rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-meta-rise {
+    animation: meta-rise 480ms ease-out forwards;
+  }
+
+  /* Danmaku floating comments — classic version used by lens danmaku layer */
+  @keyframes danmaku-slide {
+    from {
+      transform: translateX(110vw);
+    }
+    to {
+      transform: translateX(-110%);
+    }
+  }
+  .animate-danmaku-slide {
+    animation-name: danmaku-slide;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+    will-change: transform;
+  }
+
+  /* Danmaku-fly: starts from left:100% (right edge) and scrolls left off-screen */
+  @keyframes danmaku-fly {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-100vw - 200%));
+    }
+  }
+
+  /* Lens enter/exit blur transitions */
+  @keyframes lens-enter {
+    from {
+      opacity: 0;
+      filter: blur(40px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+  @keyframes lens-exit {
+    from {
+      opacity: 1;
+      filter: blur(0);
+    }
+    to {
+      opacity: 0;
+      filter: blur(40px);
+    }
+  }
+  .animate-lens-enter {
+    animation: lens-enter 380ms ease-out forwards;
+  }
+  .animate-lens-exit {
+    animation: lens-exit 380ms ease-in forwards;
+  }
+
+  /* Soft pulse for the scan ring */
+  @keyframes scan-pulse {
+    0%,
+    100% {
+      opacity: 0.25;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.55;
+      transform: scale(1.04);
+    }
+  }
+  .animate-scan-pulse {
+    animation: scan-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Album sheet slide-up */
+  @keyframes album-enter {
+    from {
+      transform: translateY(100%);
+      opacity: 0.4;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  @keyframes album-exit {
+    from {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(100%);
+      opacity: 0.4;
+    }
+  }
+  .animate-album-enter {
+    animation: album-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .animate-album-exit {
+    animation: album-exit 220ms ease-in forwards;
+  }
+
+  /* Cursor ripple on the frosted-glass card */
+  @keyframes ripple-fade {
+    0% {
+      transform: scale(1);
+      opacity: 0.7;
+    }
+    100% {
+      transform: scale(18);
+      opacity: 0;
+    }
+  }
+  .animate-ripple-fade {
+    animation: ripple-fade 850ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  /* Typewriter caret blink for streamed default-answer text */
+  @keyframes caret-blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    51%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* Menu drawer slide */
+  @keyframes drawer-enter {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  @keyframes drawer-exit {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-100%);
+    }
+  }
+  .animate-drawer-enter {
+    animation: drawer-enter 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .animate-drawer-exit {
+    animation: drawer-exit 220ms ease-in forwards;
+  }
+}
