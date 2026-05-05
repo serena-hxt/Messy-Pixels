@@ -61,9 +61,7 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
   const [digitalTwin, setDigitalTwin] = useState<Artwork | null>(null)
   const [twinLoading, setTwinLoading] = useState(false)
 
-  // Comment panel state — lives inside the twin overlay, toggled by the
-  // same ON|OFF button position as the lens danmaku toggle.
-  const [twinCommentsOpen, setTwinCommentsOpen] = useState(false)
+
 
   // Load persisted recognition history
   useEffect(() => {
@@ -404,7 +402,7 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
               }}
             />
 
-            {/* Top bar inside twin: × close (left) + Comments ON|OFF (right) */}
+            {/* Top bar: × close on left, danmaku ON|OFF on right */}
             <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 pt-5">
               <button
                 type="button"
@@ -414,36 +412,12 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
               >
                 ×
               </button>
-
-              {/* Comments toggle — same position/style as lens danmaku ON|OFF */}
-              <button
-                type="button"
-                onClick={() => setTwinCommentsOpen((v) => !v)}
-                aria-label={twinCommentsOpen ? "Hide comments" : "Show comments"}
-                aria-pressed={twinCommentsOpen}
-                className="font-mono text-[13px] tracking-[0.18em] text-white/85 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              >
-                <span className={cn("transition-colors", twinCommentsOpen ? "text-rose-400" : "text-white/40")}>ON</span>
-                <span className="mx-2 text-white/30">|</span>
-                <span className={cn("transition-colors", !twinCommentsOpen ? "text-rose-400" : "text-white/40")}>OFF</span>
-              </button>
             </div>
 
-            {/* Comment input + viewer — appears below the top bar when ON */}
-            <AnimatePresence>
-              {twinCommentsOpen && (
-                <motion.div
-                  key="twin-comments"
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute inset-x-5 top-[72px] z-10"
-                >
-                  <ArtworkComments artworkId={digitalTwin.id} />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Comments — always visible below the top bar, no toggle */}
+            <div className="absolute inset-x-5 top-[72px] z-10">
+              <ArtworkComments artworkId={digitalTwin.id} />
+            </div>
 
             {/* Bottom panel: title + 2 AI question prompts */}
             <div className="absolute inset-x-0 bottom-8 z-10 flex flex-col gap-2.5 px-5">
@@ -637,13 +611,25 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
           style={{ boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.4)" }}
         >
           <div className="flex items-center justify-between">
-            {/* Album */}
+            {/* Album — blurred Van Gogh thumbnail preview */}
             <button
               type="button"
               onClick={() => setAlbumOpen(true)}
               aria-label="Open album"
-              className="h-11 w-11 rounded-xl border-[1.5px] border-white/70 bg-white/5 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-            />
+              className="relative h-11 w-11 overflow-hidden rounded-xl border-[1.5px] border-white/70 transition-colors hover:border-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/1280px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg"
+                alt=""
+                aria-hidden="true"
+                className="h-full w-full object-cover"
+                style={{ filter: "blur(3px)", transform: "scale(1.12)" }}
+                draggable={false}
+              />
+              {/* subtle vignette overlay */}
+              <div className="absolute inset-0 bg-black/20" />
+            </button>
 
             {/* Shutter + photo|video caption */}
             <div className="flex flex-col items-center gap-2">

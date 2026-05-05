@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       .from("artwork_comments")
       .insert({
         artwork_id: parseInt(artworkId, 10),
-        nickname: nickname?.trim() || "Visitor",
+        nickname: "Anonymous",
         content: content.trim().slice(0, 500), // Cap at 500 chars
       })
       .select("id, nickname, content, created_at")
