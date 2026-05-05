@@ -198,17 +198,29 @@ export default function HomePage() {
     setCanvasStartWithReference(false)
     setCanvasReadyCue(false)
     if (!saved) return
-    const drawing: SavedDrawing = {
-      id: `dwg_${Date.now()}`,
-      dataUrl: saved.dataUrl,
-      note: saved.note,
-      createdAt: Date.now(),
+
+    // In scripted flows the user's raw sketch is NOT shown as a thumbnail
+    // in the chat — the pre-generated hand-and-flower reward image stands
+    // in for it. Outside scripted mode we still surface the sketch.
+    const isScriptedCanvasStep = (() => {
+      if (!scriptedFlow) return false
+      const branch = getScriptedBranch(scriptedFlow.triggerQuestion, scriptedFlow.objectid)
+      return Boolean(branch?.steps[scriptedFlow.stepIndex]?.canvasAction)
+    })()
+
+    if (!isScriptedCanvasStep) {
+      const drawing: SavedDrawing = {
+        id: `dwg_${Date.now()}`,
+        dataUrl: saved.dataUrl,
+        note: saved.note,
+        createdAt: Date.now(),
+      }
+      setDrawings((prev) => [...prev, drawing])
     }
-    setDrawings((prev) => [...prev, drawing])
-    
+
     // Scripted flow — strictly NO Gemini/LLM calls. The user's "I just made
     // a creative addition…" message is injected as a synthetic user bubble,
-    // then after a 2-second simulated thinking pause Bitsy delivers two
+    // then after a 5-second simulated thinking pause Bitsy delivers two
     // pre-baked replies in chronological order: (1) the hand-and-flower
     // reward image, (2) the hard-coded evaluation text.
     if (scriptedFlow) {
