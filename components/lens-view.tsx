@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { ChevronUp, Menu, RotateCcw, Send } from "lucide-react"
+import { ChevronRight, ChevronUp, Menu, RotateCcw, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AlbumSheet, type Recognition, type RecognizedHistoryItem } from "@/components/album-sheet"
 import { ArtworkComments } from "@/components/artwork-comments"
