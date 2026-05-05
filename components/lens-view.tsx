@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { ChevronRight, Menu, RotateCcw, Send } from "lucide-react"
+import { ChevronUp, Menu, RotateCcw, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AlbumSheet, type Recognition, type RecognizedHistoryItem } from "@/components/album-sheet"
 import { ArtworkComments } from "@/components/artwork-comments"
@@ -60,6 +60,7 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
   // whenever the recognition is dropped (e.g. user re-points the camera).
   const [digitalTwin, setDigitalTwin] = useState<Artwork | null>(null)
   const [twinLoading, setTwinLoading] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
 
 
@@ -384,13 +385,14 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
             {/* Backdrop */}
             <div className="absolute inset-0 bg-foreground/92" />
 
-            {/* High-res image */}
+            {/* High-res image — click to collapse drawer if open */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={digitalTwin.primaryimageurl}
               alt={`${digitalTwin.title} by ${digitalTwin.artist}`}
               className="absolute inset-0 h-full w-full object-contain"
               draggable={false}
+              onClick={() => drawerOpen && setDrawerOpen(false)}
             />
 
             {/* Subtle gold restoration glow */}
@@ -424,54 +426,94 @@ export function LensView({ onClose, onAskAI }: LensViewProps) {
             </div>
 
             {/* Danmaku floating layer — fills the space between top bar and bottom panel */}
-            <div className="absolute inset-x-0 top-[80px] bottom-[230px] z-10 overflow-hidden px-5">
+            <div className="absolute inset-x-0 top-[80px] bottom-[140px] z-10 overflow-hidden px-5">
               <ArtworkComments artworkId={digitalTwin.id} floatingOnly />
             </div>
 
-            {/* Bottom panel: title + 2 AI question prompts */}
-            <div className="absolute inset-x-0 bottom-8 z-10 flex flex-col gap-2.5 px-5">
-              {/* Title / artist label */}
+            {/* Bottom panel: title + collapsible action drawer */}
+            <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-0 px-5">
+              {/* Animated questions drawer */}
+              <AnimatePresence>
+                {drawerOpen && (
+                  <motion.div
+                    className="mb-2.5 flex flex-col gap-2.5 overflow-hidden"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                  >
+                    {[
+                      `What makes "${digitalTwin.title}" by ${digitalTwin.artist} significant in art history?`,
+                      `If I were standing in front of "${digitalTwin.title}", what details should I look for first?`,
+                    ].map((question) => (
+                      <button
+                        key={question}
+                        type="button"
+                        onClick={() => {
+                          onAskAI?.(question, digitalTwin.id)
+                        }}
+                        className="group flex items-center gap-3 rounded-xl border border-white/18 bg-black/35 px-4 py-3 text-left backdrop-blur-xl transition-colors hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                        style={{ boxShadow: "0 8px 20px -10px rgba(0,0,0,0.5)" }}
+                      >
+                        <span className="flex-1 font-mono text-[12px] leading-relaxed text-white/80 group-hover:text-white">
+                          {question}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className="shrink-0 font-mono text-[13px] text-white/35 transition-transform group-hover:translate-x-0.5 group-hover:text-white/60"
+                        >
+                          →
+                        </span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Title / artist label with expand button */}
               <div
-                className="rounded-2xl border border-white/20 bg-black/40 px-5 py-3 text-left backdrop-blur-2xl"
+                className="rounded-2xl border border-white/20 bg-black/40 px-5 py-3 text-left backdrop-blur-2xl transition-all duration-300"
                 style={{ boxShadow: "0 18px 40px -16px rgba(0,0,0,0.55)" }}
+                onClick={() => setDrawerOpen(!drawerOpen)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    setDrawerOpen(!drawerOpen)
+                  }
+                }}
               >
-                <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-white/55">
-                  now viewing
-                </p>
-                <p className="font-mono text-[14px] leading-tight text-white">
-                  {digitalTwin.title}
-                </p>
-                <p className="mt-0.5 font-mono text-[11px] text-white/70">
-                  {digitalTwin.artist}
-                  {displayYear ? ` · ${displayYear}` : ""}
-                </p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-white/55">
+                      now viewing
+                    </p>
+                    <p className="font-mono text-[14px] leading-tight text-white">
+                      {digitalTwin.title}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-white/70">
+                      {digitalTwin.artist}
+                      {displayYear ? ` · ${displayYear}` : ""}
+                    </p>
+                  </div>
+                  <motion.button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setDrawerOpen(!drawerOpen)
+                    }}
+                    className="mt-1 shrink-0 rounded-full p-1.5 text-white/60 hover:text-white transition-colors"
+                    aria-label={drawerOpen ? "Collapse questions" : "Expand questions"}
+                    aria-expanded={drawerOpen}
+                    animate={{ rotate: drawerOpen ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronUp className="h-4 w-4" strokeWidth={1.5} />
+                  </motion.button>
+                </div>
               </div>
 
-              {/* AI question prompts — clicking sends the question to Bitsy and closes the lens */}
-              {[
-                `What makes "${digitalTwin.title}" by ${digitalTwin.artist} significant in art history?`,
-                `If I were standing in front of "${digitalTwin.title}", what details should I look for first?`,
-              ].map((question) => (
-                <button
-                  key={question}
-                  type="button"
-                  onClick={() => {
-                    onAskAI?.(question, digitalTwin.id)
-                  }}
-                  className="group flex items-center gap-3 rounded-xl border border-white/18 bg-black/35 px-4 py-3 text-left backdrop-blur-xl transition-colors hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                  style={{ boxShadow: "0 8px 20px -10px rgba(0,0,0,0.5)" }}
-                >
-                  <span className="flex-1 font-mono text-[12px] leading-relaxed text-white/80 group-hover:text-white">
-                    {question}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="shrink-0 font-mono text-[13px] text-white/35 transition-transform group-hover:translate-x-0.5 group-hover:text-white/60"
-                  >
-                    →
-                  </span>
-                </button>
-              ))}
+              <div className="h-2" />
             </div>
           </motion.div>
         )}
